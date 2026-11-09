@@ -1,4 +1,4 @@
-# 🚗 Apex Pro Driving Academy — Custom Driving School Management Web App
+# 🚗 ShivSamarth Driving Academy — Custom Driving School Management Web App
 
 A production-grade, full-stack, multi-branch driving school management web application synthesized from master design specifications.
 
