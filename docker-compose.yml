@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    container_name: driving-school-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - JWT_SECRET=shivsamarth_super_secure_jwt_secret_2026_production
+      - DB_PATH=/app/data/driving_school.sqlite
+    volumes:
+      - driving_school_data:/app/data
+
+volumes:
+  driving_school_data:
