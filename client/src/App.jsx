@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { CategoryNavBar } from './components/CategoryNavBar';
@@ -142,6 +143,7 @@ export default function App() {
   return (
     <AppProvider>
       <AppRouter />
+      <SpeedInsights />
     </AppProvider>
   );
 }
