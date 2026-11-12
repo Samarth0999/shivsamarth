@@ -1,4 +1,4 @@
-# 🚗 Apex Pro Driving Academy — Custom Driving School Management Web App
+# 🚗 ShivSamarth Driving Academy — Custom Driving School Management Web App
 
 A production-grade, full-stack, multi-branch driving school management web application synthesized from master design specifications.
 
@@ -11,7 +11,7 @@ A production-grade, full-stack, multi-branch driving school management web appli
 * **Branch-Level Data Isolation:** Instructors and branch staff are strictly locked to their assigned `branch_id`. They cannot view, search, edit, or delete data from other branches.
 * **Auto-Branch Assignment:** When standard staff register a new student, the system automatically tags the student profile with that staff member's branch.
 * **Global Universal Search:** Top navigation bar search box (`[ 🔍 Search by Name, Phone, or Enroll ID ]`) with instant floating preview across authorized branches.
-* **Quick Persona Switcher:** Built-in live testing persona switcher in the header allowing 1-click toggling between **👑 Super Admin (Vikram Deshmukh)**, **🏢 Beed Branch Manager (Suresh Kale)**, **🏢 Pune Branch Manager (Nitin Shirole)**, **🚗 Lead Instructor (Rajesh Patil)**, **🚗 Daily Wage Instructor (Amit Shinde)**, and **📋 Office Counselor (Pooja More)**.
+* **Quick Persona Switcher:** Built-in live testing persona switcher in the header allowing 1-click toggling between **👑 Super Admin (Samarth Gore)**, **🏢 Beed Branch Manager (Suresh Kale)**, **🏢 Pune Branch Manager (Nitin Shirole)**, **🚗 Lead Instructor (Rajesh Patil)**, **🚗 Daily Wage Instructor (Amit Shinde)**, and **📋 Office Counselor (Pooja More)**.
 
 ---
 

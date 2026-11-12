@@ -444,46 +444,48 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
   return (
     <div className="space-y-6">
 
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      {/* Header & Controls (Registered Students Directory) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Students & Admissions Engine</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
-              {students.length} Registered
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Auto-branch isolation, sequence-locked Enroll IDs, dynamic RTO license tracking, and Strategy A absence rules.
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <Users className="w-6 h-6 text-purple-600" />
+            <span>Registered Students Directory</span>
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Maintain master student records, branch assignments, and historical enrollments.
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setIsAdmissionModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-sm shadow-purple-600/20 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>New Student Admission</span>
+          <span>Register Student</span>
         </button>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
         
-        <div className="flex items-center gap-2 flex-1 max-w-sm">
+        <div className="flex items-center gap-3 flex-1 min-w-[240px] max-w-md">
           <div className="relative w-full">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Filter by name, phone, enroll id..."
+              placeholder="Search by student name, phone or reg no..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-10 pl-10 pr-4 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-500"
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-xs font-semibold text-slate-500 mr-1">
+            Total Students: <span className="text-slate-900 font-bold">{students.length}</span>
+          </span>
           
           {/* Day 10 Filter Toggle */}
           <button
@@ -531,7 +533,132 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
 
       {/* Students Data Table */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-slate-100">
+          {students.map(s => (
+            <div key={s.id} className="p-4 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono font-bold text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                      {s.enroll_id}
+                    </span>
+                    {s.isDay10Warning && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        DAY 10
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      s.riskLevel === 'HIGH' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                      s.riskLevel === 'MEDIUM' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                      'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }`}>
+                      {s.riskLevel} Risk
+                    </span>
+                  </div>
+                  <div className="font-bold text-sm text-slate-900 mt-1 truncate">{s.name}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                    <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span>{s.phone}</span>
+                    <span>·</span>
+                    <span className="truncate">{s.branch_name}</span>
+                  </div>
+                </div>
+                {s.isRtoGateUnlocked ? (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                    <CheckCircle className="w-3 h-3" />
+                    <span>RTO Ready</span>
+                  </span>
+                ) : (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                    <ShieldAlert className="w-3 h-3 text-amber-500" />
+                    <span>Locked</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="bg-slate-50 rounded-xl px-3 py-2 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-800 truncate">{s.course_name}</span>
+                  <span className="shrink-0 font-bold text-slate-700">
+                    Day {s.days_completed}/{s.total_course_days}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (s.days_completed / s.total_course_days) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="truncate">{s.batch_time_slot || 'Unassigned'} · {s.instructor_name || 'No Instructor'}</span>
+                  <span className="font-bold shrink-0">
+                    {s.pending_balance > 0 ? (
+                      <span className="text-amber-600">₹{s.pending_balance.toLocaleString('en-IN')} due</span>
+                    ) : (
+                      <span className="text-emerald-600">Paid</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-1.5 pt-0.5 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  {s.pending_balance > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => triggerWhatsAppReminder(s)}
+                        className="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                        title="Send pre-filled WhatsApp Fee Reminder"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPayment(s)}
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        Collect
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {(isSuperAdmin || hasPermission('manage_students')) && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditStudent(s)}
+                      className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors cursor-pointer"
+                      title={isSuperAdmin ? 'Master Edit Student Record (Super Admin)' : 'Edit Student Record'}
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {(isSuperAdmin || hasPermission('delete_students') || hasPermission('manage_students')) && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStudent(s)}
+                      className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer"
+                      title={isSuperAdmin ? 'Master Delete Student (Permanent)' : 'Delete Student Record'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDetails(s)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    <span>Profile</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px] tracking-wider">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   FileText, Download, Calendar, Filter, 
-  DollarSign, AlertTriangle, Receipt, ArrowRight
+  DollarSign, AlertTriangle, Receipt, ArrowRight, BarChart3, TrendingUp, Users
 } from 'lucide-react';
 import { 
   exportFeesCollectionPDF, 
@@ -19,7 +19,37 @@ export function ReportsView() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
+  const [misSummary, setMisSummary] = useState({
+    totalLeads: 0,
+    convertedLeads: 0,
+    totalStudents: 0,
+    totalCollected: 0,
+    totalPending: 0
+  });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadMisSummary() {
+      try {
+        const [statsRes, leadsRes] = await Promise.all([
+          apiFetch(`/api/branches/stats${selectedBranchId ? `?branchId=${selectedBranchId}` : ''}`),
+          apiFetch('/api/leads').catch(() => ({ leads: [] }))
+        ]);
+        const stats = statsRes.stats || [];
+        const leads = leadsRes.leads || [];
+        setMisSummary({
+          totalLeads: leads.length,
+          convertedLeads: leads.filter(l => l.status === 'converted').length,
+          totalStudents: stats.reduce((a, b) => a + (b.total_students || 0), 0),
+          totalCollected: stats.reduce((a, b) => a + (b.total_collected || 0), 0),
+          totalPending: stats.reduce((a, b) => a + (b.total_pending || 0), 0)
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadMisSummary();
+  }, [apiFetch, selectedBranchId]);
 
   const fetchReport = async () => {
     setLoading(true);
@@ -67,31 +97,71 @@ export function ReportsView() {
     showToast(`Official ${reportData.report_type} PDF downloaded successfully!`);
   };
 
+  const conversionRate = misSummary.totalLeads > 0
+    ? Math.round((misSummary.convertedLeads / misSummary.totalLeads) * 100)
+    : 0;
+
   return (
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Reports & PDF Export Module</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">
-              Module 10
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Dedicated reporting engines for Fees Collection, Risk Defaulters, and Operational Expenses with single-click PDF export.
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <BarChart3 className="w-6 h-6 text-purple-600" />
+            <span>MIS Reports & Executive Analytics</span>
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Real-time multi-branch metrics across lead conversion, admissions, and financial receivables.
           </p>
         </div>
 
         <button
+          type="button"
           onClick={handleDownloadPDF}
           disabled={!reportData || loading}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-semibold shadow-sm shadow-purple-600/20 transition-all shrink-0 cursor-pointer"
         >
           <Download className="w-4 h-4" />
           <span>Download Official PDF</span>
         </button>
+      </div>
+
+      {/* Executive Analytics Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs">
+          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
+            <TrendingUp className="w-4 h-4" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">{conversionRate}%</div>
+          <div className="text-xs font-medium text-slate-500 mt-0.5">
+            Lead Conversion ({misSummary.convertedLeads}/{misSummary.totalLeads})
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+            <Users className="w-4 h-4" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">{misSummary.totalStudents}</div>
+          <div className="text-xs font-medium text-slate-500 mt-0.5">Total Admissions</div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+            <DollarSign className="w-4 h-4" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">₹{misSummary.totalCollected.toLocaleString('en-IN')}</div>
+          <div className="text-xs font-medium text-slate-500 mt-0.5">Realized Collections</div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
+            <AlertTriangle className="w-4 h-4" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900">₹{misSummary.totalPending.toLocaleString('en-IN')}</div>
+          <div className="text-xs font-medium text-slate-500 mt-0.5">Financial Receivables</div>
+        </div>
       </div>
 
       {/* Standalone Report Engine Tabs */}

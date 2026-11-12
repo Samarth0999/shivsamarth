@@ -2,22 +2,81 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 
 const AppContext = createContext(null);
 
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem('auth_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredSession() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('auth_user');
+  localStorage.removeItem('view_mode');
+  localStorage.removeItem('active_tab');
+  localStorage.removeItem('selected_branch_id');
+}
+
 export function AppProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
+  const initialToken = localStorage.getItem('auth_token');
+  const initialUser = initialToken ? readStoredUser() : null;
+  const initialViewMode = initialToken && (localStorage.getItem('view_mode') || 'staff') === 'staff'
+    ? 'staff'
+    : 'landing';
+
+  const [currentUser, setCurrentUser] = useState(initialUser);
   const [usersList, setUsersList] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [selectedBranchId, setSelectedBranchId] = useState(null); // null means All Branches (for super_admin)
+  const [selectedBranchId, setSelectedBranchId] = useState(() => {
+    if (!initialUser) return null;
+    if (initialUser.role !== 'super_admin') return initialUser.branch_id ?? null;
+    const saved = localStorage.getItem('selected_branch_id');
+    return saved ? Number(saved) : null;
+  });
   const [settings, setSettings] = useState({});
   const [courseTypes, setCourseTypes] = useState([]);
   const [paymentModes, setPaymentModes] = useState([]);
   const [expenseCategories, setExpenseCategories] = useState([]);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState(() => {
+    const savedTab = localStorage.getItem('active_tab');
+    if (savedTab) return savedTab;
+    return initialUser?.role === 'instructor' ? 'instructor' : 'dashboard';
+  });
   const [toast, setToast] = useState(null);
-  const [viewMode, setViewMode] = useState('landing'); // 'landing' (public) | 'staff' (management portal)
-  const [isNavOpen, setIsNavOpen] = useState(true); // Navigation menu open / close toggle
+  const [viewMode, setViewModeState] = useState(initialViewMode);
+  const [isNavOpen, setIsNavOpen] = useState(() => {
+    const saved = localStorage.getItem('is_nav_open');
+    if (saved !== null) return saved === 'true';
+    return typeof window !== 'undefined' ? window.innerWidth >= 768 : true;
+  });
+
+  const setActiveTab = useCallback((tab) => {
+    setActiveTabState(tab);
+    localStorage.setItem('active_tab', tab);
+  }, []);
+
+  const setViewMode = useCallback((mode) => {
+    setViewModeState(mode);
+    localStorage.setItem('view_mode', mode);
+  }, []);
+
+  const handleSetSelectedBranchId = useCallback((branchId) => {
+    setSelectedBranchId(branchId);
+    if (branchId) {
+      localStorage.setItem('selected_branch_id', String(branchId));
+    } else {
+      localStorage.removeItem('selected_branch_id');
+    }
+  }, []);
 
   const toggleNavMenu = useCallback(() => {
-    setIsNavOpen(prev => !prev);
+    setIsNavOpen(prev => {
+      const next = !prev;
+      localStorage.setItem('is_nav_open', String(next));
+      return next;
+    });
   }, []);
 
   // Universal Search State
@@ -60,74 +119,95 @@ export function AppProvider({ children }) {
     }
   }, [currentUser]);
 
-  // Load initial settings and users
-  const loadInitialData = useCallback(async (userId = 1) => {
+  // Load authenticated user session, users, branches, and settings
+  const loadInitialData = useCallback(async (explicitUserId = null) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token && !explicitUserId) return;
+
+    const authHeaders = token
+      ? { 'Authorization': `Bearer ${token}` }
+      : { 'x-user-id': String(explicitUserId) };
+
     try {
-      // 1. Get current user
-      const authRes = await fetch('/api/auth/me', {
-        headers: { 'x-user-id': String(userId) }
-      });
+      // 1. Verify & refresh authenticated user profile
+      const authRes = await fetch('/api/auth/me', { headers: authHeaders });
+      if (authRes.status === 401) {
+        clearStoredSession();
+        setCurrentUser(null);
+        setViewModeState('landing');
+        return;
+      }
+
       const authData = await authRes.json();
       if (authData.user) {
-        setCurrentUser(authData.user);
-        // If instructor, set activeTab to 'instructor'
-        if (authData.user.role === 'instructor') {
-          setActiveTab('instructor');
-        } else {
-          setActiveTab('dashboard');
+        const hydratedUser = {
+          ...authData.user,
+          permissions: authData.permissions || authData.user.permissions || {}
+        };
+        setCurrentUser(hydratedUser);
+        localStorage.setItem('auth_user', JSON.stringify(hydratedUser));
+
+        if (hydratedUser.role !== 'super_admin') {
+          setSelectedBranchId(hydratedUser.branch_id ?? null);
+        }
+
+        // Only set a default tab if none is saved yet or instructor logged in on a non-instructor tab
+        const savedTab = localStorage.getItem('active_tab');
+        if (!savedTab) {
+          const defaultTab = hydratedUser.role === 'instructor' ? 'instructor' : 'dashboard';
+          setActiveTabState(defaultTab);
+          localStorage.setItem('active_tab', defaultTab);
+        } else if (hydratedUser.role === 'instructor' && !savedTab.startsWith('instructor')) {
+          setActiveTabState('instructor');
+          localStorage.setItem('active_tab', 'instructor');
         }
       }
 
-      // 2. Get users list for persona switcher
-      const usersRes = await fetch('/api/auth/users', {
-        headers: { 'x-user-id': String(userId) }
-      });
+      // 2. Get users list
+      const usersRes = await fetch('/api/auth/users', { headers: authHeaders });
       const usersData = await usersRes.json();
       if (usersData.users) setUsersList(usersData.users);
 
       // 3. Get branches
-      const branchesRes = await fetch('/api/branches', {
-        headers: { 'x-user-id': String(userId) }
-      });
+      const branchesRes = await fetch('/api/branches', { headers: authHeaders });
       const branchesData = await branchesRes.json();
       if (branchesData.branches) setBranches(branchesData.branches);
 
       // 4. Get system settings
-      const settingsRes = await fetch('/api/settings', {
-        headers: { 'x-user-id': String(userId) }
-      });
+      const settingsRes = await fetch('/api/settings', { headers: authHeaders });
       const settingsData = await settingsRes.json();
       if (settingsData.settings) setSettings(settingsData.settings);
       if (settingsData.courseTypes) setCourseTypes(settingsData.courseTypes);
       if (settingsData.paymentModes) setPaymentModes(settingsData.paymentModes);
       if (settingsData.expenseCategories) setExpenseCategories(settingsData.expenseCategories);
-
     } catch (err) {
       console.error('Initialization error:', err);
     }
   }, []);
 
   useEffect(() => {
-    loadInitialData(1); // Start with Super Admin Vikram Deshmukh
+    if (localStorage.getItem('auth_token')) {
+      loadInitialData();
+    }
   }, [loadInitialData]);
 
-  // Switch persona (Super Admin, Branch Manager, Instructor, Office Staff)
+  // Switch persona
   const switchPersona = useCallback(async (userId) => {
     try {
       const selected = usersList.find(u => u.id === Number(userId));
       if (selected) {
         setCurrentUser(selected);
+        localStorage.setItem('auth_user', JSON.stringify(selected));
         if (selected.role === 'instructor') {
           setActiveTab('instructor');
         } else {
           setActiveTab('dashboard');
         }
 
-        // Adjust branch filter
         if (selected.role !== 'super_admin') {
-          setSelectedBranchId(selected.branch_id);
+          handleSetSelectedBranchId(selected.branch_id);
         } else {
-          setSelectedBranchId(null);
+          handleSetSelectedBranchId(null);
         }
 
         showToast(`Switched active persona to ${selected.name} (${selected.role.replace('_', ' ').toUpperCase()})`, 'info');
@@ -135,7 +215,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       showToast(err.message, 'error');
     }
-  }, [usersList, showToast]);
+  }, [usersList, showToast, setActiveTab, handleSetSelectedBranchId]);
 
   // Perform Universal Global Search
   const performSearch = useCallback(async (term) => {
@@ -161,13 +241,13 @@ export function AppProvider({ children }) {
     const phone = String(student.phone || student.student_phone).replace(/\D/g, '');
     const formattedPhone = phone.startsWith('91') ? phone : `91${phone}`;
 
-    const schoolName = settings.app_name || 'Apex Pro Driving Academy';
+    const schoolName = settings.app_name || 'ShivSamarth Motor Driving School';
     const branchName = student.branch_name || 'Main Branch';
     const daysDone = student.days_completed;
     const totalDays = student.total_course_days;
     const balance = student.pending_balance;
 
-    let message = settings.whatsapp_fee_reminder_template || 
+    let message = settings.whatsapp_fee_reminder_template ||
       `Namaste {student_name}, Greetings from {school_name} ({branch_name}). You have completed Day {days_completed}/{total_days} of your driving course. Your pending fee balance is Rs. {pending_balance}. Please settle this balance at the branch office to ensure smooth RTO test scheduling. Thank you!`;
 
     message = message
@@ -181,7 +261,6 @@ export function AppProvider({ children }) {
     const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
 
-    // Log reminder in backend
     try {
       await apiFetch(`/api/students/${student.id}/whatsapp-reminder`, { method: 'POST' });
       showToast(`WhatsApp reminder dispatched for ${student.name || student.student_name}!`);
@@ -191,20 +270,24 @@ export function AppProvider({ children }) {
   }, [settings, apiFetch, showToast]);
 
   const loginUser = useCallback((user, token) => {
+    if (token) localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+
     setCurrentUser(user);
     setViewMode('staff');
-    if (user.role === 'instructor') {
-      setActiveTab('instructor');
-    } else {
-      setActiveTab('dashboard');
-    }
+
+    const defaultTab = user.role === 'instructor' ? 'instructor' : 'dashboard';
+    setActiveTab(defaultTab);
+    handleSetSelectedBranchId(user.role !== 'super_admin' ? user.branch_id : null);
+
+    loadInitialData();
     showToast(`Welcome back, ${user.name}!`);
-  }, [showToast]);
+  }, [showToast, setViewMode, setActiveTab, handleSetSelectedBranchId, loadInitialData]);
 
   const logoutUser = useCallback(() => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
-    setViewMode('landing');
+    clearStoredSession();
+    setCurrentUser(null);
+    setViewModeState('landing');
     showToast('Logged out from staff portal', 'info');
   }, [showToast]);
 
@@ -229,7 +312,7 @@ export function AppProvider({ children }) {
         branches,
         setBranches,
         selectedBranchId,
-        setSelectedBranchId,
+        setSelectedBranchId: handleSetSelectedBranchId,
         settings,
         setSettings,
         courseTypes,

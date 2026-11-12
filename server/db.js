@@ -248,7 +248,8 @@ function initializeDatabase() {
       salary_type TEXT NOT NULL,
       base_salary REAL NOT NULL,
       days_in_month INTEGER NOT NULL,
-      days_present INTEGER NOT NULL,
+      days_present REAL NOT NULL,
+      days_present_override REAL,
       gross_pay REAL NOT NULL,
       advances_deducted REAL DEFAULT 0,
       incentives REAL DEFAULT 0,
@@ -426,7 +427,7 @@ function seedInitialData() {
     'Samarth Gore (Owner)',
     'owner@shivsamarth.com',
     '9370107031',
-    'password123',
+    'Sam@2007',
     'super_admin',
     100000,
     'monthly',
@@ -577,7 +578,12 @@ initializeDatabase();
 // Ensure instructor_id column exists on batches in existing database
 try {
   db.prepare('ALTER TABLE batches ADD COLUMN instructor_id INTEGER REFERENCES users(id) ON DELETE SET NULL').run();
-} catch (e) {}
+} catch (e) { }
+
+// Ensure days_present_override column exists on payroll_records in existing database
+try {
+  db.prepare('ALTER TABLE payroll_records ADD COLUMN days_present_override REAL').run();
+} catch (e) { }
 
 module.exports = {
   db,

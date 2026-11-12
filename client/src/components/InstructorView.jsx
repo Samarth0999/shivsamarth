@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext';
 import { 
   CheckCircle, XCircle, MapPin, Calendar, Clock, 
   MessageSquare, AlertTriangle, ShieldCheck, Wallet, 
-  Navigation, RefreshCw, UserCheck, AlertCircle
+  Navigation, RefreshCw, UserCheck, AlertCircle,
+  ClipboardList
 } from 'lucide-react';
 
 export function InstructorView() {
@@ -125,7 +126,7 @@ export function InstructorView() {
   };
 
   // Live GPS Capture & Check-In
-  const handleGeofencedCheckIn = (lat, lon) => {
+  const handleGeofencedCheckIn = () => {
     setCheckingGps(true);
     setGeoError('');
 
@@ -146,12 +147,6 @@ export function InstructorView() {
       }
     };
 
-    if (lat !== undefined && lon !== undefined) {
-      // Used simulated coordinates
-      proceedCheckin(lat, lon);
-      return;
-    }
-
     if (!navigator.geolocation) {
       setGeoError('Geolocation is not supported by your browser.');
       setCheckingGps(false);
@@ -165,7 +160,7 @@ export function InstructorView() {
         proceedCheckin(latitude, longitude);
       },
       (err) => {
-        setGeoError(`Unable to retrieve GPS: ${err.message}. Use the simulation button below for testing.`);
+        setGeoError(`Unable to retrieve GPS: ${err.message}. Please enable location permissions and try again.`);
         setCheckingGps(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -189,69 +184,87 @@ export function InstructorView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
 
-      {/* Instructor Mobile Header */}
-      <div className="bg-gradient-to-r from-slate-900 to-blue-950 p-5 rounded-3xl text-white shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Instructor Workspace Header */}
+      <div className="bg-gradient-to-br from-[#140d21] via-[#1c1230] to-[#281647] p-5 sm:p-6 rounded-2xl text-white shadow-lg border border-purple-500/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-400/30">
-                INSTRUCTOR PORTAL
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200 font-bold uppercase tracking-wider border border-purple-400/30">
+                Instructor Workspace
               </span>
               <span className="text-xs text-slate-300 font-medium">
-                {currentUser?.branch_name || 'Beed Branch'}
+                {currentUser?.branch_name || 'Main Branch'}
               </span>
             </div>
-            <h2 className="text-xl font-black mt-1.5">{currentUser?.name}</h2>
-            <p className="text-xs text-slate-300">
-              Salary Type: <span className="font-bold text-white uppercase">{currentUser?.salary_type}</span> • Base: ₹{currentUser?.base_salary}
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2">{currentUser?.name}</h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Compensation: <span className="font-semibold text-white capitalize">{currentUser?.salary_type}</span> · Base ₹{Number(currentUser?.base_salary || 0).toLocaleString('en-IN')}
             </p>
           </div>
 
-          {/* Quick Check-in pill */}
-          <div className="bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10 flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${geoStatus?.attendance?.check_in_time ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          {/* Quick Check-in / Check-out pill */}
+          <div className="bg-white/10 backdrop-blur-xs px-4 py-3 rounded-xl border border-white/10 flex items-center gap-3 self-start sm:self-auto">
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+              geoStatus?.attendance?.check_out_time
+                ? 'bg-purple-400'
+                : geoStatus?.attendance?.check_in_time
+                  ? 'bg-emerald-400 animate-pulse'
+                  : 'bg-amber-400'
+            }`} />
             <div>
-              <div className="text-[10px] text-slate-300 uppercase font-bold tracking-wider">Today's Check-In</div>
+              <div className="text-[10px] text-slate-300 uppercase font-semibold tracking-wider">Today&apos;s Attendance</div>
               <div className="text-xs font-bold text-white">
-                {geoStatus?.attendance?.check_in_time ? `Verified at ${geoStatus.attendance.check_in_time}` : 'Not Checked In Yet'}
+                {geoStatus?.attendance?.check_out_time
+                  ? `In ${geoStatus.attendance.check_in_time} · Out ${geoStatus.attendance.check_out_time}`
+                  : geoStatus?.attendance?.check_in_time
+                    ? `Checked in at ${geoStatus.attendance.check_in_time}`
+                    : 'Not Checked In Yet'}
               </div>
             </div>
           </div>
         </div>
 
         {/* Navigation Tabs for Instructor */}
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/10 overflow-x-auto text-xs font-bold">
+        <div className="flex items-center gap-2 mt-5 pt-4 border-t border-white/10 overflow-x-auto text-xs font-semibold">
           <button
+            type="button"
             onClick={() => setActiveTab('instructor')}
-            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'instructor' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10'
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'instructor' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
-            📋 Student Attendance Roster
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>Attendance Roster</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('instructor-checkin')}
-            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'instructor-checkin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10'
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'instructor-checkin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
-            📍 GPS Geofenced Check-In
+            <MapPin className="w-3.5 h-3.5" />
+            <span>GPS Check-In</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('instructor-wages')}
-            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'instructor-wages' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10'
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'instructor-wages' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
-            💰 My Wages & Attendance
+            <Wallet className="w-3.5 h-3.5" />
+            <span>My Wages &amp; Logs</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('instructor-reminders')}
-            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap ${
-              activeTab === 'instructor-reminders' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10'
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'instructor-reminders' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
-            ⚠️ Day 10 Reminders ({day10List.length})
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            <span>Day 10 Alerts ({day10List.length})</span>
           </button>
         </div>
       </div>
@@ -430,14 +443,15 @@ export function InstructorView() {
 
               {!geoStatus.attendance.check_out_time ? (
                 <button
+                  type="button"
                   onClick={handleCheckOut}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                 >
                   Record Check-Out
                 </button>
               ) : (
-                <span className="text-xs font-bold text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
-                  Checked out at {geoStatus.attendance.check_out_time}
+                <span className="text-xs font-semibold text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                  Checked out at <strong>{geoStatus.attendance.check_out_time}</strong>
                 </span>
               )}
             </div>
@@ -452,40 +466,15 @@ export function InstructorView() {
 
           {/* Live Check-In Action Button */}
           {!geoStatus?.attendance?.check_in_time && (
-            <div className="space-y-4">
-              <button
-                onClick={() => handleGeofencedCheckIn()}
-                disabled={checkingGps}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-2xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all"
-              >
-                <Navigation className="w-4 h-4" />
-                <span>{checkingGps ? 'Validating Live GPS Distance...' : 'Check In via Live GPS (100m Radius)'}</span>
-              </button>
-
-              {/* Handy GPS Testing / Simulator buttons (For devices without physical GPS motion) */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <span>🧪 Device Testing & GPS Simulation Controls</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mb-3">
-                  Click below to test both successful within-range check-in and out-of-range geofence rejection:
-                </p>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    onClick={() => handleGeofencedCheckIn(geoStatus?.branch?.latitude + 0.0001, geoStatus?.branch?.longitude + 0.0001)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Simulate: At Branch (18m away) ✅
-                  </button>
-                  <button
-                    onClick={() => handleGeofencedCheckIn(geoStatus?.branch?.latitude + 0.02, geoStatus?.branch?.longitude + 0.02)}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Simulate: Offsite (2.2km away) ❌
-                  </button>
-                </div>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={handleGeofencedCheckIn}
+              disabled={checkingGps}
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-purple-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Navigation className="w-4 h-4" />
+              <span>{checkingGps ? 'Validating Live GPS Distance...' : 'Check In via Live GPS (100m Radius)'}</span>
+            </button>
           )}
 
           {geoError && (
@@ -531,12 +520,13 @@ export function InstructorView() {
             </div>
 
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <span className="text-xs text-slate-400 font-bold uppercase">Calculated Gross</span>
+              <span className="text-xs text-slate-400 font-bold uppercase">Calculated Gross (Attended)</span>
               <div className="text-base font-black text-emerald-600 mt-1">
                 {currentUser?.salary_type === 'daily' 
                   ? `₹${wageHistory.length * currentUser?.base_salary}` 
                   : `₹${Math.round((currentUser?.base_salary / 30) * wageHistory.length)}`}
               </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">Paid Sundays added in monthly payroll</div>
             </div>
           </div>
 
@@ -544,37 +534,63 @@ export function InstructorView() {
           <div>
             <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Recent Attendance Log</h4>
             <div className="border border-slate-200 rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Check-In</th>
-                    <th className="py-2.5 px-3">Check-Out</th>
-                    <th className="py-2.5 px-3">Distance</th>
-                    <th className="py-2.5 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {wageHistory.map(row => (
-                    <tr key={row.id}>
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{row.date}</td>
-                      <td className="py-2.5 px-3 text-slate-600 font-mono">{row.check_in_time || '-'}</td>
-                      <td className="py-2.5 px-3 text-slate-600 font-mono">{row.check_out_time || '-'}</td>
-                      <td className="py-2.5 px-3 text-slate-600">{row.distance_meters ? `${row.distance_meters}m` : '-'}</td>
-                      <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
-                          Verified Present
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {wageHistory.length === 0 && (
+              <div className="md:hidden divide-y divide-slate-100">
+                {wageHistory.map(row => (
+                  <div key={row.id} className="p-3.5 flex items-center justify-between gap-2 text-xs">
+                    <div>
+                      <div className="font-mono font-bold text-slate-800">{row.date}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                        In: {row.check_in_time || '-'} · Out: {row.check_out_time || '-'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
+                        Verified
+                      </span>
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        {row.distance_meters ? `${row.distance_meters}m` : '-'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {wageHistory.length === 0 && (
+                  <div className="py-6 text-center text-xs text-slate-400">No attendance history logged yet.</div>
+                )}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate-400">No attendance history logged yet.</td>
+                      <th className="py-2.5 px-3">Date</th>
+                      <th className="py-2.5 px-3">Check-In</th>
+                      <th className="py-2.5 px-3">Check-Out</th>
+                      <th className="py-2.5 px-3">Distance</th>
+                      <th className="py-2.5 px-3">Status</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {wageHistory.map(row => (
+                      <tr key={row.id}>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{row.date}</td>
+                        <td className="py-2.5 px-3 text-slate-600 font-mono">{row.check_in_time || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-600 font-mono">{row.check_out_time || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-600">{row.distance_meters ? `${row.distance_meters}m` : '-'}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
+                            Verified Present
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {wageHistory.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-slate-400">No attendance history logged yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 

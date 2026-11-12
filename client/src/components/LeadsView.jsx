@@ -162,20 +162,19 @@ export function LeadsView({ onConvertSuccess }) {
       {/* Top Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Website Inquiries & Leads</span>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-              Live Pipeline
-            </span>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <Users className="w-6 h-6 text-purple-600" />
+            <span>Lead Pipeline Management</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time prospective students submitting inquiries from public landing page & booking modal
+          <p className="text-sm text-slate-500 mt-1">
+            Track inquiries, manage follow-ups, and convert prospective students into admissions.
           </p>
         </div>
 
         <button
+          type="button"
           onClick={loadLeads}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-sm transition-all self-start sm:self-auto"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm shadow-purple-600/20 transition-all self-start sm:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Leads</span>

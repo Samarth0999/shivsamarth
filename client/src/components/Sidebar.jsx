@@ -1,172 +1,163 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  ShieldCheck, MapPin, Globe, LogOut, PanelLeftClose, X, KeyRound
+import {
+  LogOut, PanelLeftClose, ChevronRight
 } from 'lucide-react';
-import { getNavItems } from '../utils/navConfig';
+import { getNavSections } from '../utils/navConfig';
 import { ChangePasswordModal } from './ChangePasswordModal';
 
+function getInitials(name) {
+  if (!name) return 'SA';
+  const parts = name.replace(/\(.*?\)/g, '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return parts[0]?.slice(0, 2).toUpperCase() || 'SA';
+}
+
 export function Sidebar() {
-  const { 
-    currentUser, 
-    activeTab, 
-    setActiveTab, 
-    setViewMode, 
-    logoutUser, 
-    isNavOpen, 
+  const {
+    currentUser,
+    activeTab,
+    setActiveTab,
+    logoutUser,
+    isNavOpen,
     toggleNavMenu,
-    hasPermission 
+    hasPermission
   } = useApp();
 
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const isInstructor = currentUser?.role === 'instructor';
-  const currentNav = getNavItems({ currentUser, hasPermission });
+  const navSections = getNavSections({ currentUser, hasPermission });
+  const initials = getInitials(currentUser?.name);
 
   return (
     <>
       {/* Mobile Backdrop when menu is open */}
       {isNavOpen && (
-        <div 
+        <div
           onClick={toggleNavMenu}
-          className="fixed inset-0 bg-slate-900/60 z-40 backdrop-blur-xs md:hidden"
+          className="fixed inset-0 bg-slate-950/60 z-40 backdrop-blur-xs md:hidden"
           title="Click to close navigation menu"
         />
       )}
 
       <aside className={`
-        ${isNavOpen 
-          ? 'w-64 opacity-100 translate-x-0' 
+        ${isNavOpen
+          ? 'w-60 opacity-100 translate-x-0'
           : 'w-0 opacity-0 -translate-x-full md:translate-x-0 overflow-hidden border-0 p-0 pointer-events-none'
         }
-        transition-all duration-300 ease-in-out bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800
+        transition-all duration-300 ease-in-out bg-[#140d21] text-slate-300 flex flex-col shrink-0 border-r border-white/10
         fixed md:static inset-y-0 left-0 z-50 md:z-auto h-full
       `}>
-        
-        {/* User Badge Banner */}
-        <div className="p-4 border-b border-slate-800/80 bg-slate-950/40">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-sm shrink-0">
-                {currentUser?.name?.charAt(0) || 'U'}
+
+        {/* Brand Header */}
+        <div className="h-16 px-4 border-b border-white/8 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#201636] border border-purple-500/25 p-1 flex items-center justify-center shrink-0 shadow-inner">
+              <img
+                src="/images/IMG-20211120-WA0001-removebg-preview.png"
+                alt="Shivsamarth Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => { e.currentTarget.src = '/images/driving_school.png'; }}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white leading-tight truncate">
+                Shivsamarth
               </div>
-              <div className="overflow-hidden">
-                <h3 className="font-semibold text-sm text-white truncate">{currentUser?.name}</h3>
-                <p className="text-xs text-slate-400 capitalize flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  {currentUser?.role?.replace('_', ' ')}
-                </p>
+              <div className="text-[11px] font-medium text-purple-400 leading-tight truncate">
+                Management System
               </div>
             </div>
-
-            {/* Close Navigation Button */}
-            <button
-              type="button"
-              onClick={toggleNavMenu}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
-              title="Close Navigation Menu"
-            >
-              <PanelLeftClose className="w-4 h-4" />
-            </button>
           </div>
 
-          <div className="mt-2.5 flex items-center gap-1.5">
-            {currentUser?.branch_name ? (
-              <div className="flex-1 px-2 py-1 rounded bg-slate-800/60 text-[11px] text-slate-400 flex items-center gap-1 border border-slate-700/50 truncate min-w-0">
-                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
-                <span className="truncate">{currentUser.branch_name}</span>
-              </div>
-            ) : (
-              <div className="flex-1 text-[11px] text-slate-500 font-mono">
-                HQ Consolidated
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsChangePasswordOpen(true)}
-              className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-[11px] text-amber-300 hover:text-amber-200 flex items-center gap-1 border border-amber-500/30 transition-colors shrink-0 cursor-pointer"
-              title="Change your login password"
-            >
-              <KeyRound className="w-3 h-3 text-amber-400" />
-              <span>Password</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={toggleNavMenu}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+            title="Collapse Sidebar"
+            aria-label="Collapse Sidebar"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Nav Menu */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>{isInstructor ? 'Instructor Console' : 'Navigation Menu'}</span>
-          </div>
+        {/* Categorized Navigation Menu */}
+        <nav
+          className="flex-1 px-3 py-4 space-y-5 overflow-y-auto sidebar-scroll"
+          aria-label={isInstructor ? 'Instructor Console' : 'Navigation Menu'}
+        >
+          {navSections.map((section) => (
+            <div key={section.id} className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                {section.title}
+              </div>
 
-          {currentNav.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  // On mobile screen auto-close after clicking
-                  if (window.innerWidth < 768) {
-                    toggleNavMenu();
-                  }
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                </div>
-                {item.badge && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
-                    isActive ? 'bg-blue-500 text-white' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      if (window.innerWidth < 768) {
+                        toggleNavMenu();
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-purple-700/80 via-purple-600/55 to-fuchsia-600/35 text-white font-semibold border border-purple-400/25 shadow-md shadow-purple-950/60'
+                        : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-purple-200' : 'text-slate-400'}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {isActive && (
+                      <ChevronRight className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        {/* Public Site Link & Sign Out */}
-        <div className="p-3 border-t border-slate-800/80 space-y-1.5 bg-slate-950/20">
+        {/* Bottom User Profile & Sign Out */}
+        <div className="p-3 border-t border-white/10 bg-[#100a1b] space-y-2 shrink-0">
           <button
+            type="button"
             onClick={() => setIsChangePasswordOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-amber-300 text-[11px] font-semibold border border-slate-700/60 transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/[0.05] transition-colors text-left cursor-pointer"
+            title="Click to update password"
           >
-            <KeyRound className="w-3 h-3 text-amber-400" />
-            <span>Change My Password</span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-white truncate">
+                {currentUser?.name || 'Shivsamarth Staff'}
+              </div>
+              <div className="text-[11px] text-slate-400 truncate">
+                Authorized Portal
+              </div>
+            </div>
           </button>
-          <button
-            onClick={() => setViewMode('landing')}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-800/70 hover:bg-slate-800 text-amber-300 hover:text-amber-200 border border-amber-500/25 text-xs font-bold transition-all shadow-sm cursor-pointer"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>View Public Website ↗</span>
-          </button>
-          <button
-            onClick={logoutUser}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-slate-400 hover:text-rose-400 text-[11px] font-semibold transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3 h-3" />
-            <span>Exit Portal (Sign Out)</span>
-          </button>
-        </div>
 
-        {/* System Status Footer */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/30 text-[11px] text-slate-400 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Branch Sync Active
-          </span>
-          <span className="font-mono text-slate-400">v2.4 Pro</span>
+          <button
+            type="button"
+            onClick={logoutUser}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] text-xs font-medium transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            <span>Sign Out</span>
+          </button>
         </div>
 
       </aside>

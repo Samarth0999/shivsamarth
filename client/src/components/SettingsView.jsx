@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext';
 import { 
   Settings, Sliders, Shield, Award, DollarSign, 
   Receipt, Save, Plus, CheckCircle, AlertTriangle, Users, 
-  ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation, KeyRound
+  ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation, KeyRound,
+  Building2, ArrowRight
 } from 'lucide-react';
 import { ChangePasswordModal } from './ChangePasswordModal';
 
@@ -20,10 +21,11 @@ export function SettingsView() {
     branches,
     apiFetch, 
     showToast,
-    loadInitialData 
+    loadInitialData,
+    setActiveTab: setPortalTab
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('thresholds'); // 'thresholds' | 'courses' | 'categories' | 'rbac'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'branches' | 'thresholds' | 'courses' | 'categories' | 'rbac'
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState(null);
   
@@ -563,53 +565,121 @@ export function SettingsView() {
   return (
     <div className="space-y-6">
 
-      {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Dynamic Admin Settings Hub & RBAC Matrix</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
-              Super Admin Controls
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Module 2 & 3: Configure business packages, payment methods, expense categories, risk trigger thresholds, and individual staff permission toggles.
-          </p>
+      {/* Header (System Administration & Settings) */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          System Administration & Settings
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Configure multi-branch infrastructure, role-based access control, and user directory.
+        </p>
+      </div>
+
+      {/* Top 3 Administration Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Card 1: Branch Management */}
+        <div
+          onClick={() => setActiveTab('branches')}
+          className={`bg-white rounded-2xl border p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${
+            activeTab === 'branches' ? 'border-purple-400 ring-2 ring-purple-100' : 'border-slate-200/80 hover:border-purple-200'
+          }`}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
+                {branches.length} {branches.length === 1 ? 'Branch' : 'Branches'} Active
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Branch Management</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Manage driving school locations, GPS coordinates, contact details, and activation status.
+            </p>
+          </div>
+          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
 
-        {/* Settings Navigation Tabs */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold shrink-0">
-          <button
-            onClick={() => setActiveTab('branches')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'branches' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500'}`}
-          >
-            📍 Branches & Geofence
-          </button>
-          <button
-            onClick={() => setActiveTab('thresholds')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'thresholds' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'}`}
-          >
-            ⚙️ Thresholds & Triggers
-          </button>
-          <button
-            onClick={() => setActiveTab('courses')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'courses' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'}`}
-          >
-            🚗 Course Packages
-          </button>
-          <button
-            onClick={() => setActiveTab('categories')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'categories' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'}`}
-          >
-            🏷️ Categories & Modes
-          </button>
-          <button
-            onClick={() => setActiveTab('rbac')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'rbac' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'}`}
-          >
-            🛡️ RBAC Privilege Matrix
-          </button>
+        {/* Card 2: Role & Permission Control */}
+        <div
+          onClick={() => setActiveTab('rbac')}
+          className={`bg-white rounded-2xl border p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${
+            activeTab === 'rbac' ? 'border-purple-400 ring-2 ring-purple-100' : 'border-slate-200/80 hover:border-purple-200'
+          }`}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Shield className="w-5 h-5" />
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
+                4 System Roles
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Role & Permission Control</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Configure system roles (Super Admin, Branch Admin, Instructor, Front Office) and default permission matrices.
+            </p>
+          </div>
+          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
+
+        {/* Card 3: Staff Accounts & Access */}
+        <div
+          onClick={() => setPortalTab('staff')}
+          className="bg-white rounded-2xl border border-slate-200/80 hover:border-purple-200 p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
+                Staff Directory
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Staff Accounts & Access</h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              Add, modify, and manage employee accounts, multi-branch assignments, and custom override permissions.
+            </p>
+          </div>
+          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Secondary Settings Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200/80 w-fit">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'branches', label: 'Branches & Geofence' },
+          { id: 'rbac', label: 'Role & Permission Matrix' },
+          { id: 'thresholds', label: 'Thresholds & Triggers' },
+          { id: 'courses', label: 'Course Packages' },
+          { id: 'categories', label: 'Payment & Expense Modes' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === tab.id
+                ? 'bg-purple-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* ============================================================== */}

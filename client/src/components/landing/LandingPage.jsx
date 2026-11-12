@@ -14,10 +14,18 @@ import { LandingBookingModal } from './LandingBookingModal';
 import { StaffLoginModal } from './StaffLoginModal';
 
 export function LandingPage() {
-  const { loginUser } = useApp();
+  const { loginUser, currentUser, setViewMode } = useApp();
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [selectedCourseForBooking, setSelectedCourseForBooking] = useState(null);
+
+  const handleOpenStaffPortal = () => {
+    if (currentUser && localStorage.getItem('auth_token')) {
+      setViewMode('staff');
+    } else {
+      setIsStaffModalOpen(true);
+    }
+  };
 
   // Global Keyboard Listener for Ctrl + Shift + S
   useEffect(() => {
@@ -25,13 +33,17 @@ export function LandingPage() {
       // Check for Ctrl+Shift+S or Cmd+Shift+S (Mac)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
-        setIsStaffModalOpen(prev => !prev);
+        if (currentUser && localStorage.getItem('auth_token')) {
+          setViewMode('staff');
+        } else {
+          setIsStaffModalOpen(prev => !prev);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [currentUser, setViewMode]);
 
   const handleEnrollCourse = (course) => {
     setSelectedCourseForBooking(course);
@@ -49,7 +61,7 @@ export function LandingPage() {
       {/* Top Navbar */}
       <LandingNavbar
         onBookNow={handleOpenDemoBooking}
-        onOpenStaffPortal={() => setIsStaffModalOpen(true)}
+        onOpenStaffPortal={handleOpenStaffPortal}
       />
 
       {/* Hero Section */}
@@ -79,7 +91,7 @@ export function LandingPage() {
       <LandingContact />
 
       {/* Comprehensive SEO Footer */}
-      <LandingFooter onOpenStaffPortal={() => setIsStaffModalOpen(true)} />
+      <LandingFooter onOpenStaffPortal={handleOpenStaffPortal} />
 
       {/* Floating Action Quick Dialers */}
       <LandingFloatingActions onBookNow={handleOpenDemoBooking} />
