@@ -7,7 +7,7 @@ const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
-const db = new Database(DB_PATH);https://github.com/Samarth0999/shivsamarth/settings
+const db = new Database(DB_PATH);
 
 // Enable foreign keys and WAL mode for high performance
 db.pragma('foreign_keys = ON');
