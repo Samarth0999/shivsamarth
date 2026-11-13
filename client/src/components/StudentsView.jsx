@@ -4,7 +4,7 @@ import {
   Users, Plus, Search, Filter, Phone, Calendar, 
   CheckCircle, AlertTriangle, ShieldAlert, Award, MessageSquare, 
   DollarSign, FileText, ChevronRight, X, Clock, Car, ExternalLink,
-  Edit, Trash2, Shield, Star
+  Edit, Trash2, Shield, Star, Ban, RotateCcw
 } from 'lucide-react';
 import { exportStudentReceiptPDF } from '../utils/pdfGenerator';
 
@@ -444,6 +444,28 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
     }
   };
 
+  // Cancel or Reactivate Course
+  const handleCancelCourse = async (student) => {
+    const isCurrentlyCancelled = student.status === 'cancelled';
+    const action = isCurrentlyCancelled ? 'reactivate' : 'cancel';
+    const confirmPrompt = isCurrentlyCancelled
+      ? `Reactivate course for ${student.name} (${student.enroll_id})? This will restore the student to active training.`
+      : `Are you sure you want to cancel the course for ${student.name} (${student.enroll_id})?`;
+
+    if (!window.confirm(confirmPrompt)) return;
+
+    try {
+      const res = await apiFetch(`/api/students/${student.id}/cancel-course`, {
+        method: 'POST',
+        body: JSON.stringify({ action })
+      });
+      showToast(res.message || `Course ${action}ed successfully!`);
+      await fetchStudents();
+    } catch (err) {
+      showToast(err.message || `Failed to ${action} course`, 'error');
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -560,6 +582,11 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                     <span className="font-mono font-bold text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                       {s.enroll_id}
                     </span>
+                    {s.status === 'cancelled' && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                        Cancelled
+                      </span>
+                    )}
                     {s.isDay10Warning && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                         DAY 10
@@ -663,6 +690,24 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                   {(isSuperAdmin || hasPermission('manage_students')) && (
                     <button
                       type="button"
+                      onClick={() => handleCancelCourse(s)}
+                      className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                        s.status === 'cancelled'
+                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                          : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                      }`}
+                      title={s.status === 'cancelled' ? 'Reactivate Student Course' : 'Cancel Student Course'}
+                    >
+                      {s.status === 'cancelled' ? (
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      ) : (
+                        <Ban className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
+                  {(isSuperAdmin || hasPermission('manage_students')) && (
+                    <button
+                      type="button"
                       onClick={() => handleOpenEditStudent(s)}
                       className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors cursor-pointer"
                       title={isSuperAdmin ? 'Master Edit Student Record (Super Admin)' : 'Edit Student Record'}
@@ -713,10 +758,15 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                   
                   {/* Enroll ID & Student */}
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                         {s.enroll_id}
                       </span>
+                      {s.status === 'cancelled' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                          Cancelled
+                        </span>
+                      )}
                       {s.isDay10Warning && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200" title="Day 10 warning triggered">
                           DAY 10
@@ -860,6 +910,26 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
+
+                      {/* Cancel / Reactivate Course Button */}
+                      {(isSuperAdmin || hasPermission('manage_students')) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelCourse(s)}
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                            s.status === 'cancelled'
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                          }`}
+                          title={s.status === 'cancelled' ? 'Reactivate Student Course' : 'Cancel Student Course'}
+                        >
+                          {s.status === 'cancelled' ? (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          ) : (
+                            <Ban className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
 
                       {/* Edit Student Record */}
                       {(isSuperAdmin || hasPermission('manage_students')) && (
@@ -1368,10 +1438,15 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
             
             <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-xs font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-800">
                     {studentDetails.student.enroll_id}
                   </span>
+                  {studentDetails.student.status === 'cancelled' && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-rose-900 text-rose-200 border border-rose-700">
+                      Cancelled
+                    </span>
+                  )}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
                     studentDetails.student.riskLevel === 'HIGH' ? 'bg-rose-900 text-rose-200' :
                     studentDetails.student.riskLevel === 'MEDIUM' ? 'bg-amber-900 text-amber-200' :
@@ -1382,12 +1457,40 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                 </div>
                 <h3 className="text-base font-black text-white mt-1">{studentDetails.student.name}</h3>
               </div>
-              <button 
-                onClick={() => setIsDetailModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {(isSuperAdmin || hasPermission('manage_students')) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleCancelCourse(studentDetails.student);
+                      setIsDetailModalOpen(false);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                      studentDetails.student.status === 'cancelled'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+                    }`}
+                  >
+                    {studentDetails.student.status === 'cancelled' ? (
+                      <>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Reactivate Course</span>
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Cancel Course</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                <button 
+                  onClick={() => setIsDetailModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
@@ -1685,6 +1788,7 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
                     >
                       <option value="active">Active Trainee</option>
+                      <option value="cancelled">Course Cancelled</option>
                       <option value="completed">Completed / Graduated</option>
                       <option value="discontinued">Discontinued / Dropped</option>
                     </select>

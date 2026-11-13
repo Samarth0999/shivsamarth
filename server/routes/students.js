@@ -502,6 +502,40 @@ router.put('/:id', (req, res) => {
   }
 });
 
+// Cancel or Reactivate Course for a student
+router.post('/:id/cancel-course', (req, res) => {
+  const studentId = parseInt(req.params.id, 10);
+  const branchFilter = getAuthorizedBranchFilter(req);
+
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId);
+  if (!student) return res.status(404).json({ error: 'Student not found.' });
+
+  if (!branchFilter.isAll && student.branch_id !== branchFilter.branchId) {
+    return res.status(403).json({ error: 'Access denied across branches.' });
+  }
+
+  if (req.user.role !== 'super_admin' && !req.user.parsedPermissions?.manage_students) {
+    return res.status(403).json({ error: 'Permission denied: manage_students right required.' });
+  }
+
+  const { action } = req.body;
+  const targetStatus = action === 'reactivate' ? 'active' : 'cancelled';
+
+  try {
+    db.prepare('UPDATE students SET status = ? WHERE id = ?').run(targetStatus, studentId);
+    const updated = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId);
+    res.json({
+      success: true,
+      message: targetStatus === 'cancelled'
+        ? `Course has been cancelled for ${student.name} (${student.enroll_id}).`
+        : `Course has been reactivated for ${student.name} (${student.enroll_id}).`,
+      student: updated
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Record a Fee Payment
 router.post('/:id/payments', (req, res) => {
   const studentId = parseInt(req.params.id, 10);

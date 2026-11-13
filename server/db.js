@@ -476,20 +476,6 @@ function seedInitialData() {
 
 initializeDatabase();
 
-// Enforce single Super Admin only: delete all non-super-admin staff accounts
-try {
-  const superAdmin = db.prepare("SELECT id FROM users WHERE role = 'super_admin' LIMIT 1").get();
-  if (superAdmin) {
-    db.prepare("UPDATE batches SET instructor_id = NULL WHERE instructor_id IS NOT NULL AND instructor_id != ?").run(superAdmin.id);
-    db.prepare("UPDATE students SET primary_instructor_id = NULL WHERE primary_instructor_id IS NOT NULL AND primary_instructor_id != ?").run(superAdmin.id);
-    try {
-      db.prepare("UPDATE leads SET assigned_to_user_id = NULL WHERE assigned_to_user_id IS NOT NULL AND assigned_to_user_id != ?").run(superAdmin.id);
-    } catch (e) {}
-    db.prepare("DELETE FROM user_permissions WHERE user_id != ?").run(superAdmin.id);
-    db.prepare("DELETE FROM users WHERE role != 'super_admin'").run();
-  }
-} catch (e) { }
-
 // Ensure instructor_id column exists on batches in existing database
 try {
   db.prepare('ALTER TABLE batches ADD COLUMN instructor_id INTEGER REFERENCES users(id) ON DELETE SET NULL').run();

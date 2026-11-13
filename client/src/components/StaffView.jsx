@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   UserCog, Plus, Search, Shield, Edit,
-  KeyRound, X, Building2, Phone, Mail, Save
+  KeyRound, X, Building2, Phone, Mail, Save,
+  UserCheck, UserX
 } from 'lucide-react';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { RBAC_CATEGORIES, DEFAULT_ROLE_PERMISSIONS } from '../utils/rbacConfig';
@@ -58,14 +59,76 @@ export function StaffView() {
   const loadStaff = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch('/api/auth/users');
-      const serverUsers = res.users || [];
-
-      // Update local storage with current roster
+      // 1. Read existing locally persisted staff cache
+      let localStaff = [];
       try {
-        localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(serverUsers));
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) localStaff = JSON.parse(raw);
       } catch (e) {}
-      setStaff(serverUsers);
+
+      // 2. Fetch from backend
+      const res = await apiFetch('/api/auth/users');
+      let serverUsers = res.users || [];
+
+      // 3. Find any custom staff in localStaff that is missing from server (e.g. serverless cold start)
+      const serverEmails = new Set(serverUsers.map(u => (u.email || '').toLowerCase().trim()));
+      const missingStaff = localStaff.filter(u =>
+        u.email &&
+        u.role !== 'super_admin' &&
+        !serverEmails.has(u.email.toLowerCase().trim())
+      );
+
+      // Re-sync missing staff back to server
+      if (missingStaff.length > 0) {
+        for (const staffMember of missingStaff) {
+          try {
+            await apiFetch('/api/auth/users', {
+              method: 'POST',
+              body: JSON.stringify({
+                name: staffMember.name,
+                email: staffMember.email,
+                phone: staffMember.phone,
+                role: staffMember.role,
+                branch_id: staffMember.branch_id,
+                salary_type: staffMember.salary_type,
+                base_salary: staffMember.base_salary,
+                max_discount_limit: staffMember.max_discount_limit,
+                permissions: staffMember.permissions,
+                is_active: staffMember.is_active !== undefined ? staffMember.is_active : 1
+              })
+            });
+          } catch (syncErr) {
+            console.warn('Staff re-sync note:', syncErr.message);
+          }
+        }
+
+        try {
+          const refreshed = await apiFetch('/api/auth/users');
+          if (refreshed.users) serverUsers = refreshed.users;
+        } catch (e) {}
+      }
+
+      // 4. Merge server users with local cache (unique by email or id)
+      const rosterMap = new Map();
+      serverUsers.forEach(u => {
+        const key = (u.email || String(u.id)).toLowerCase().trim();
+        rosterMap.set(key, u);
+      });
+      localStaff.forEach(u => {
+        const key = (u.email || String(u.id)).toLowerCase().trim();
+        if (!rosterMap.has(key)) {
+          rosterMap.set(key, u);
+        } else {
+          const existing = rosterMap.get(key);
+          rosterMap.set(key, { ...u, ...existing });
+        }
+      });
+
+      const finalRoster = Array.from(rosterMap.values());
+      try {
+        localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(finalRoster));
+      } catch (e) {}
+      setStaff(finalRoster);
     } catch (err) {
       // Fallback to locally stored staff roster if network fails
       try {
@@ -116,6 +179,40 @@ export function StaffView() {
       permissions: user.permissions || {}
     });
     setIsModalOpen(true);
+  };
+
+  const handleToggleStaffStatus = async (user) => {
+    if (user.role === 'super_admin') {
+      showToast('Super Admin account must remain active.', 'error');
+      return;
+    }
+
+    const nextStatus = user.is_active ? 0 : 1;
+    const actionLabel = nextStatus ? 'activated' : 'deactivated';
+
+    try {
+      await apiFetch(`/api/auth/users/${user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: nextStatus })
+      });
+
+      // Update local storage cache
+      try {
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) {
+          const list = JSON.parse(raw).map(u =>
+            u.id === user.id ? { ...u, is_active: nextStatus } : u
+          );
+          localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(list));
+        }
+      } catch (e) {}
+
+      showToast(`Staff member "${user.name}" is now ${nextStatus ? 'Active' : 'Inactive'}.`);
+      await loadStaff();
+      if (loadInitialData) await loadInitialData(currentUser?.id);
+    } catch (err) {
+      showToast(err.message || `Failed to ${actionLabel} staff account`, 'error');
+    }
   };
 
   const openPermissionsModal = (user) => {
@@ -205,10 +302,22 @@ export function StaffView() {
 
       if (editingStaff) {
         if (!payload.password) delete payload.password;
-        await apiFetch(`/api/auth/users/${editingStaff.id}`, {
+        const res = await apiFetch(`/api/auth/users/${editingStaff.id}`, {
           method: 'PUT',
           body: JSON.stringify(payload)
         });
+
+        // Also update local cache
+        try {
+          const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+          if (raw) {
+            const list = JSON.parse(raw).map(u =>
+              u.id === editingStaff.id ? { ...u, ...payload, ...(res.user || {}) } : u
+            );
+            localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(list));
+          }
+        } catch (e) {}
+
         showToast('Staff account & permissions updated!');
       } else {
         const res = await apiFetch('/api/auth/users', {
@@ -394,9 +503,31 @@ export function StaffView() {
                       {user.phone && <div className="text-[11px] text-slate-500">{user.phone}</div>}
                     </div>
                   </div>
-                  <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize ${roleBadgeClass(user.role)}`}>
-                    {user.role?.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize ${roleBadgeClass(user.role)}`}>
+                      {user.role?.replace('_', ' ')}
+                    </span>
+                    {isSuperAdmin && user.role !== 'super_admin' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStaffStatus(user)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer transition-colors ${
+                          user.is_active
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                        }`}
+                        title={user.is_active ? 'Click to mark Inactive' : 'Click to mark Active'}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span>{user.is_active ? 'Active' : 'Inactive'}</span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span>Active</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-xs bg-slate-50 rounded-xl px-3 py-2">
@@ -442,6 +573,22 @@ export function StaffView() {
                       <span>Password</span>
                     </button>
                   )}
+
+                  {isSuperAdmin && user.role !== 'super_admin' && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStaffStatus(user)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                        user.is_active
+                          ? 'bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-700 border-emerald-200'
+                          : 'bg-rose-50 hover:bg-emerald-50 text-rose-700 hover:text-emerald-700 border-rose-200'
+                      }`}
+                      title={user.is_active ? 'Deactivate staff account' : 'Activate staff account'}
+                    >
+                      {user.is_active ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+                      <span>{user.is_active ? 'Active' : 'Inactive'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -454,6 +601,7 @@ export function StaffView() {
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 px-5">Staff Member</th>
                   <th className="py-3.5 px-4">Role</th>
+                  <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Branch Assignment</th>
                   <th className="py-3.5 px-4">Compensation</th>
                   <th className="py-3.5 px-4">Max Discount</th>
@@ -481,6 +629,28 @@ export function StaffView() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full border text-[11px] font-semibold capitalize ${roleBadgeClass(user.role)}`}>
                         {user.role?.replace('_', ' ')}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {isSuperAdmin && user.role !== 'super_admin' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStaffStatus(user)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border cursor-pointer ${
+                            user.is_active
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                          }`}
+                          title={user.is_active ? 'Click to mark Inactive' : 'Click to mark Active'}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span>{user.is_active ? 'Active' : 'Inactive'}</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>Active</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-slate-700 font-medium">
                       <span className="inline-flex items-center gap-1.5">
@@ -524,6 +694,20 @@ export function StaffView() {
                             title="Reset Password"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {isSuperAdmin && user.role !== 'super_admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStaffStatus(user)}
+                            className={`p-2 rounded-lg transition-colors cursor-pointer border ${
+                              user.is_active
+                                ? 'bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-700 border-emerald-200'
+                                : 'bg-rose-50 hover:bg-emerald-50 text-rose-700 hover:text-emerald-700 border-rose-200'
+                            }`}
+                            title={user.is_active ? 'Deactivate staff account' : 'Activate staff account'}
+                          >
+                            {user.is_active ? <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> : <UserX className="w-3.5 h-3.5 text-rose-600" />}
                           </button>
                         )}
                       </div>
@@ -660,6 +844,18 @@ export function StaffView() {
                     onChange={(e) => setForm({ ...form, max_discount_limit: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Account Status</label>
+                  <select
+                    value={form.is_active}
+                    disabled={editingStaff?.role === 'super_admin'}
+                    onChange={(e) => setForm({ ...form, is_active: Number(e.target.value) })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500 disabled:bg-slate-50"
+                  >
+                    <option value={1}>Active Staff</option>
+                    <option value={0}>Inactive (Access Disabled)</option>
+                  </select>
                 </div>
               </div>
 
