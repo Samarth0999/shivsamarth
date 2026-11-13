@@ -4,7 +4,7 @@ import {
   CheckCircle, XCircle, MapPin, Calendar, Clock, 
   MessageSquare, AlertTriangle, ShieldCheck, Wallet, 
   Navigation, RefreshCw, UserCheck, AlertCircle,
-  ClipboardList
+  ClipboardList, Star
 } from 'lucide-react';
 
 export function InstructorView() {
@@ -13,6 +13,7 @@ export function InstructorView() {
     apiFetch, 
     showToast, 
     triggerWhatsAppReminder,
+    triggerGoogleReviewRequest,
     settings,
     activeTab,
     setActiveTab 
@@ -123,6 +124,12 @@ export function InstructorView() {
     } catch (err) {
       showToast(err.message, 'error');
     }
+  };
+
+  // Dispatch Google Review WhatsApp message
+  const handleSendGoogleReview = async (student) => {
+    await triggerGoogleReviewRequest(student);
+    setRoster(prev => prev.map(s => s.id === student.id ? { ...s, last_review_request_at: new Date().toISOString() } : s));
   };
 
   // Live GPS Capture & Check-In
@@ -312,6 +319,9 @@ export function InstructorView() {
             {roster.map(student => {
               const isPresent = student.attendance_status === 'present';
               const isAbsent = student.attendance_status === 'absent';
+              const triggerDays = Number(settings?.google_review_trigger_days) || 3;
+              const remainingDays = (student.total_course_days || 0) - (student.days_completed || 0);
+              const isReviewReady = student.isNearingCompletion || (student.total_course_days > 0 && remainingDays <= triggerDays) || (student.days_completed >= student.total_course_days);
 
               return (
                 <div 
@@ -325,13 +335,19 @@ export function InstructorView() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                           {student.enroll_id}
                         </span>
                         <span className="text-xs font-semibold text-slate-500">
                           {student.batch_time_slot}
                         </span>
+                        {isReviewReady && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-600" />
+                            Review Ready
+                          </span>
+                        )}
                       </div>
                       <h4 className="font-bold text-sm text-slate-900 mt-1">{student.name}</h4>
                       <div className="text-xs text-slate-500 flex items-center gap-3 mt-1">
@@ -341,8 +357,24 @@ export function InstructorView() {
                       </div>
                     </div>
 
-                    {/* Quick Present / Absent Toggle Buttons */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Quick Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {isReviewReady && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendGoogleReview(student)}
+                          title={student.last_review_request_at ? `Google Review asked on ${new Date(student.last_review_request_at).toLocaleDateString()}` : 'Send 5-Star Google Review WhatsApp invite'}
+                          className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                            student.last_review_request_at
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white border-amber-400 shadow-xs'
+                          }`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${student.last_review_request_at ? 'fill-amber-500 text-amber-600' : 'fill-white text-white'}`} />
+                          <span>{student.last_review_request_at ? 'Resend Review' : 'Ask Review'}</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleMarkAttendance(student.id, 'present')}
                         className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs ${

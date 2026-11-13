@@ -164,6 +164,7 @@ function initializeDatabase() {
       rto_test_status TEXT DEFAULT 'pending', -- 'pending', 'scheduled', 'passed', 'failed'
       rto_test_date TEXT,
       last_whatsapp_reminder_at TEXT,
+      last_review_request_at TEXT,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
 
@@ -284,12 +285,13 @@ function initializeDatabase() {
     );
   `);
 
-  // Ensure password_hash column exists in users
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT 'password123';`);
-  } catch (e) {
-    // Column already exists
-  }
+  // Ensure all columns exist in users table for existing databases
+  try { db.exec(`ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT 'password123';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN max_discount_limit REAL DEFAULT 0;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN salary_type TEXT DEFAULT 'monthly';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN base_salary REAL DEFAULT 18000;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT '{}';`); } catch (e) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;`); } catch (e) {}
 
   seedInitialData();
   seedPermissionsAndLeads();
@@ -385,6 +387,9 @@ function seedInitialData() {
   insertSetting.run('geofence_radius_meters', '100', 'Maximum allowed distance in meters for staff attendance check-in');
   insertSetting.run('app_name', 'ShivSamarth Motor Driving School', 'Application Brand Name');
   insertSetting.run('whatsapp_fee_reminder_template', 'Namaste {student_name}, Greetings from {school_name} ({branch_name}). You have completed Day {days_completed}/{total_days} of your driving course. Your pending fee balance is ₹{pending_balance}. Please settle this balance at the branch office to ensure smooth RTO test scheduling. Thank you!', 'WhatsApp fee reminder text template');
+  insertSetting.run('google_review_url', 'https://g.page/r/shivsamarth-driving-school/review', 'Google Business Profile Review Link');
+  insertSetting.run('google_review_trigger_days', '3', 'Remaining course days threshold to trigger Google review WhatsApp invitation');
+  insertSetting.run('whatsapp_google_review_template', 'Namaste {student_name}! 🚗✨ Congratulations on nearing the completion of your driving course (Day {days_completed}/{total_days}) at {school_name} ({branch_name})!\n\nWe hope you had a great experience learning to drive safely with our certified instructors. Could you please take 1 minute to share your feedback and give us a 5-star Google Review here?\n\n⭐ Review Link: {google_review_link}\n\nYour review helps our team grow and guides future learners. Thank you & happy safe driving! 🌟', 'WhatsApp Google Review Message Template');
 
   // 3. Course Types
   const insertCourse = db.prepare(`
@@ -438,10 +443,10 @@ function seedInitialData() {
   // Beed Branch Manager
   const uBeedMgr = insertUser.run(
     beed.lastInsertRowid,
-    'Suresh Kale (Beed Manager)',
-    'suresh.beed@shivsamarth.com',
-    '9822111111',
-    'beed123',
+    'Rameshwar Kade (ShriYash Manager)',
+    'rameshwar.shri@shivsamarth.com',
+    '9405799009',
+    'Shri@2026',
     'branch_manager',
     3000,
     'monthly',
@@ -585,7 +590,244 @@ try {
   db.prepare('ALTER TABLE payroll_records ADD COLUMN days_present_override REAL').run();
 } catch (e) { }
 
+// Ensure last_review_request_at column exists on students in existing database
+try {
+  db.prepare('ALTER TABLE students ADD COLUMN last_review_request_at TEXT').run();
+} catch (e) { }
+
+// Ensure Google review default settings exist in existing database
+try {
+  const insertSettingIfMissing = db.prepare('INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)');
+  insertSettingIfMissing.run('google_review_url', 'https://g.page/r/shivsamarth-driving-school/review', 'Google Business Profile Review Link');
+  insertSettingIfMissing.run('google_review_trigger_days', '3', 'Remaining course days threshold to trigger Google review WhatsApp invitation');
+  insertSettingIfMissing.run('whatsapp_google_review_template', 'Namaste {student_name}! 🚗✨ Congratulations on nearing the completion of your driving course (Day {days_completed}/{total_days}) at {school_name} ({branch_name})!\n\nWe hope you had a great experience learning to drive safely with our certified instructors. Could you please take 1 minute to share your feedback and give us a 5-star Google Review here?\n\n⭐ Review Link: {google_review_link}\n\nYour review helps our team grow and guides future learners. Thank you & happy safe driving! 🌟', 'WhatsApp Google Review Message Template');
+} catch (e) { }
+
+// ==========================================
+// USER MANAGEMENT & RBAC PERSISTENCE API
+// ==========================================
+
+function getUserPermissions(userId) {
+  const permMap = {};
+  const perms = db.prepare('SELECT permission_key, is_granted FROM user_permissions WHERE user_id = ?').all(userId);
+  perms.forEach(p => {
+    permMap[p.permission_key] = Boolean(p.is_granted);
+  });
+  return permMap;
+}
+
+function setUserPermissions(userId, permissions) {
+  if (!permissions || typeof permissions !== 'object') return {};
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(JSON.stringify(permissions), userId);
+
+    const upsertPerm = db.prepare(`
+      INSERT INTO user_permissions (user_id, permission_key, is_granted)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, permission_key) DO UPDATE SET is_granted = excluded.is_granted
+    `);
+
+    for (const [key, val] of Object.entries(permissions)) {
+      upsertPerm.run(userId, key, val ? 1 : 0);
+    }
+  });
+
+  tx();
+  return getUserPermissions(userId);
+}
+
+function getAllUsers(branchFilter = null) {
+  let query = `
+    SELECT u.id, u.branch_id, u.name, u.email, u.phone, u.role, u.max_discount_limit,
+           u.salary_type, u.base_salary, u.is_active, u.created_at,
+           b.name as branch_name, b.code as branch_code
+    FROM users u
+    LEFT JOIN branches b ON u.branch_id = b.id
+  `;
+  const params = [];
+
+  if (branchFilter) {
+    query += ' WHERE u.branch_id = ?';
+    params.push(branchFilter);
+  }
+
+  query += ' ORDER BY u.role, u.name';
+  const users = db.prepare(query).all(...params);
+
+  return users.map(u => ({
+    ...u,
+    permissions: getUserPermissions(u.id)
+  }));
+}
+
+function getUserById(userId) {
+  const user = db.prepare(`
+    SELECT u.id, u.branch_id, u.name, u.email, u.phone, u.role, u.max_discount_limit,
+           u.salary_type, u.base_salary, u.is_active, u.created_at, u.password_hash,
+           b.name as branch_name, b.code as branch_code
+    FROM users u
+    LEFT JOIN branches b ON u.branch_id = b.id
+    WHERE u.id = ?
+  `).get(userId);
+
+  if (!user) return null;
+  const { password_hash, ...safeUser } = user;
+  safeUser.permissions = getUserPermissions(user.id);
+  return safeUser;
+}
+
+function createUser(userData) {
+  const {
+    branch_id,
+    name,
+    email,
+    phone,
+    password,
+    role,
+    max_discount_limit,
+    salary_type,
+    base_salary,
+    permissions
+  } = userData;
+
+  if (!name || !email || !role) {
+    throw new Error('Name, email, and role are required.');
+  }
+
+  const tx = db.transaction(() => {
+    const insert = db.prepare(`
+      INSERT INTO users (
+        branch_id, name, email, phone, password_hash, role,
+        max_discount_limit, salary_type, base_salary, permissions, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `);
+
+    const result = insert.run(
+      branch_id || null,
+      name.trim(),
+      email.trim().toLowerCase(),
+      phone || null,
+      password || 'password123',
+      role,
+      Number(max_discount_limit) || 0,
+      salary_type || 'monthly',
+      Number(base_salary) || 18000,
+      JSON.stringify(permissions || {})
+    );
+
+    const newUserId = result.lastInsertRowid;
+
+    if (permissions && typeof permissions === 'object') {
+      const insertPerm = db.prepare(`
+        INSERT INTO user_permissions (user_id, permission_key, is_granted)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, permission_key) DO UPDATE SET is_granted = excluded.is_granted
+      `);
+      for (const [key, val] of Object.entries(permissions)) {
+        insertPerm.run(newUserId, key, val ? 1 : 0);
+      }
+    }
+
+    return newUserId;
+  });
+
+  const newId = tx();
+  return getUserById(newId);
+}
+
+function updateUser(userId, userData) {
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!existing) {
+    throw new Error('User not found.');
+  }
+
+  const {
+    branch_id,
+    name,
+    phone,
+    role,
+    password,
+    max_discount_limit,
+    salary_type,
+    base_salary,
+    permissions,
+    is_active
+  } = userData;
+
+  const tx = db.transaction(() => {
+    const update = db.prepare(`
+      UPDATE users
+      SET branch_id = COALESCE(?, branch_id),
+          name = COALESCE(?, name),
+          phone = COALESCE(?, phone),
+          password_hash = COALESCE(?, password_hash),
+          role = COALESCE(?, role),
+          max_discount_limit = COALESCE(?, max_discount_limit),
+          salary_type = COALESCE(?, salary_type),
+          base_salary = COALESCE(?, base_salary),
+          is_active = COALESCE(?, is_active)
+      WHERE id = ?
+    `);
+
+    update.run(
+      branch_id !== undefined ? (branch_id ? Number(branch_id) : null) : existing.branch_id,
+      name ? name.trim() : existing.name,
+      phone !== undefined ? phone : existing.phone,
+      password || existing.password_hash,
+      role || existing.role,
+      max_discount_limit !== undefined ? Number(max_discount_limit) : existing.max_discount_limit,
+      salary_type || existing.salary_type,
+      base_salary !== undefined ? Number(base_salary) : existing.base_salary,
+      is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active,
+      userId
+    );
+
+    if (permissions && typeof permissions === 'object') {
+      db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(JSON.stringify(permissions), userId);
+
+      const upsertPerm = db.prepare(`
+        INSERT INTO user_permissions (user_id, permission_key, is_granted)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, permission_key) DO UPDATE SET is_granted = excluded.is_granted
+      `);
+      for (const [key, val] of Object.entries(permissions)) {
+        upsertPerm.run(userId, key, val ? 1 : 0);
+      }
+    }
+  });
+
+  tx();
+  return getUserById(userId);
+}
+
+function deleteUser(userId) {
+  const existing = db.prepare('SELECT id, name, role FROM users WHERE id = ?').get(userId);
+  if (!existing) {
+    throw new Error('User not found.');
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(userId);
+    db.prepare('UPDATE batches SET instructor_id = NULL WHERE instructor_id = ?').run(userId);
+    db.prepare('UPDATE students SET primary_instructor_id = NULL WHERE primary_instructor_id = ?').run(userId);
+    try { db.prepare('UPDATE leads SET assigned_to_user_id = NULL WHERE assigned_to_user_id = ?').run(userId); } catch (e) { }
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  });
+
+  tx();
+  return { success: true, message: `Staff account "${existing.name}" deleted successfully.` };
+}
+
 module.exports = {
   db,
-  getNextEnrollId
+  getNextEnrollId,
+  // User Management Methods
+  getAllUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+  getUserPermissions,
+  setUserPermissions
 };

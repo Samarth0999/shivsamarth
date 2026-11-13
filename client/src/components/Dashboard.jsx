@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import {
   UserCheck, Users, TrendingUp, Car, ArrowUpRight,
   AlertTriangle, MessageSquare, Building2, CheckCircle2,
-  Receipt, BarChart3, UserPlus
+  Receipt, BarChart3, UserPlus, Star
 } from 'lucide-react';
 
 export function Dashboard({ onOpenAdmission }) {
@@ -14,6 +14,7 @@ export function Dashboard({ onOpenAdmission }) {
     selectedBranchId,
     apiFetch,
     triggerWhatsAppReminder,
+    triggerGoogleReviewRequest,
     setActiveTab
   } = useApp();
 
@@ -21,6 +22,7 @@ export function Dashboard({ onOpenAdmission }) {
 
   const [branchStats, setBranchStats] = useState([]);
   const [day10Students, setDay10Students] = useState([]);
+  const [reviewEligibleStudents, setReviewEligibleStudents] = useState([]);
   const [leadsCount, setLeadsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -28,14 +30,16 @@ export function Dashboard({ onOpenAdmission }) {
     async function fetchDashboardData() {
       setLoading(true);
       try {
-        const [statsRes, d10Res, leadsRes] = await Promise.all([
+        const [statsRes, d10Res, reviewRes, leadsRes] = await Promise.all([
           apiFetch(`/api/branches/stats${selectedBranchId ? `?branchId=${selectedBranchId}` : ''}`),
           apiFetch(`/api/students?day10Only=true${selectedBranchId ? `&branchId=${selectedBranchId}` : ''}`),
+          apiFetch(`/api/students?nearingCompletionOnly=true${selectedBranchId ? `&branchId=${selectedBranchId}` : ''}`),
           apiFetch('/api/leads').catch(() => ({ leads: [] }))
         ]);
 
         if (statsRes.stats) setBranchStats(statsRes.stats);
         if (d10Res.students) setDay10Students(d10Res.students);
+        if (reviewRes.students) setReviewEligibleStudents(reviewRes.students);
         if (leadsRes.leads) setLeadsCount(leadsRes.leads.length);
       } catch (err) {
         console.error('Dashboard load error:', err);
@@ -299,6 +303,56 @@ export function Dashboard({ onOpenAdmission }) {
                 >
                   <MessageSquare className="w-3 h-3" />
                   <span>Remind</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Course Nearing Completion: Google Review Invitations Strip */}
+      {reviewEligibleStudents.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50/90 via-amber-50/70 to-purple-50/50 border border-amber-200/90 rounded-2xl p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/70">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Star className="w-4 h-4 fill-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <span>Course Nearing Completion — Google Review Ready ({reviewEligibleStudents.length})</span>
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Students in their final training lessons. Request a 5-star Google Review on WhatsApp with 1 click.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('students')}
+              className="text-xs font-semibold text-purple-900 hover:text-purple-950 flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <span>View All Students</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            {reviewEligibleStudents.slice(0, 3).map(student => (
+              <div key={student.id} className="bg-white p-3.5 rounded-xl border border-amber-200/70 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="min-w-0">
+                  <div className="font-semibold text-xs text-slate-900 truncate">{student.name}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Day {student.days_completed}/{student.total_course_days} • <span className="text-purple-700 font-semibold">{student.branch_name}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => triggerGoogleReviewRequest(student)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold cursor-pointer shrink-0 shadow-2xs"
+                >
+                  <Star className="w-3 h-3 fill-white" />
+                  <span>Review</span>
                 </button>
               </div>
             ))}

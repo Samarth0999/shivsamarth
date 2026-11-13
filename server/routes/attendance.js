@@ -18,7 +18,8 @@ router.get('/students/roster', (req, res) => {
     SELECT 
       s.id, s.enroll_id, s.name, s.phone, s.days_completed, s.total_course_days, 
       s.expected_end_date, s.admission_date, s.pending_balance, s.status as student_status,
-      s.primary_instructor_id, s.batch_id,
+      s.primary_instructor_id, s.batch_id, s.last_review_request_at,
+      ct.name as course_name,
       b.name as branch_name,
       bt.name as batch_name, bt.time_slot,
       sa.id as attendance_id,
@@ -26,6 +27,7 @@ router.get('/students/roster', (req, res) => {
       sa.notes as attendance_notes
     FROM students s
     JOIN branches b ON s.branch_id = b.id
+    LEFT JOIN course_types ct ON s.course_type_id = ct.id
     LEFT JOIN batches bt ON s.batch_id = bt.id
     LEFT JOIN student_attendance sa ON sa.student_id = s.id AND sa.date = ?
     WHERE s.status = 'active'

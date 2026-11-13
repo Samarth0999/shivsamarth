@@ -1,7 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { db } = require('../db');
+const {
+  db,
+  getAllUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+  getUserPermissions,
+  setUserPermissions
+} = require('../db');
 const { requireRole, authMiddleware, JWT_SECRET } = require('../middleware/auth');
 
 // Public JWT Login Endpoint for Secret Staff Portal (Ctrl+Shift+S)
@@ -66,7 +75,7 @@ router.post('/login', (req, res) => {
     permissions[p.permission_key] = Boolean(p.is_granted);
   });
 
-  // Generate signed JWT Token
+  // Generate signed JWT Token (1 hour auto-logout expiration)
   const token = jwt.sign(
     {
       id: user.id,
@@ -77,7 +86,7 @@ router.post('/login', (req, res) => {
       permissions
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '1h' }
   );
 
   // Exclude password_hash in response
@@ -88,6 +97,7 @@ router.post('/login', (req, res) => {
     success: true,
     message: `Welcome back, ${user.name}!`,
     token,
+    expires_in: 3600, // 1 hour in seconds
     user: safeUser,
     permissions
   });
@@ -101,31 +111,13 @@ router.get('/me', authMiddleware, (req, res) => {
 
 // Get all users (with branch details)
 router.get('/users', authMiddleware, (req, res) => {
-  let query = `
-    SELECT u.*, b.name as branch_name, b.code as branch_code
-    FROM users u
-    LEFT JOIN branches b ON u.branch_id = b.id
-  `;
-  const params = [];
-
-  if (req.user && req.user.role !== 'super_admin') {
-    query += ' WHERE u.branch_id = ?';
-    params.push(req.user.branch_id);
+  try {
+    const branchFilter = (req.user && req.user.role !== 'super_admin') ? req.user.branch_id : null;
+    const users = getAllUsers(branchFilter);
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  query += ' ORDER BY u.role, u.name';
-  const users = db.prepare(query).all(...params);
-
-  const formatted = users.map(u => {
-    const { password_hash, ...safe } = u;
-    const perms = db.prepare('SELECT permission_key, is_granted FROM user_permissions WHERE user_id = ?').all(u.id);
-    const permMap = {};
-    perms.forEach(p => { permMap[p.permission_key] = Boolean(p.is_granted); });
-    safe.permissions = permMap;
-    return safe;
-  });
-
-  res.json({ users: formatted });
 });
 
 // Create new user (Super Admin or Branch Manager)
@@ -142,35 +134,19 @@ router.post('/users', authMiddleware, (req, res) => {
   }
 
   try {
-    const insert = db.prepare(`
-      INSERT INTO users (branch_id, name, email, phone, password_hash, role, max_discount_limit, salary_type, base_salary, permissions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = insert.run(
-      targetBranchId || null,
-      name.trim(),
-      email.trim().toLowerCase(),
-      phone || null,
-      password || 'password123',
+    const newUser = createUser({
+      branch_id: targetBranchId,
+      name,
+      email,
+      phone,
+      password,
       role,
-      max_discount_limit || 0,
-      salary_type || 'monthly',
-      base_salary || 18000,
-      JSON.stringify(permissions || {})
-    );
+      max_discount_limit,
+      salary_type,
+      base_salary,
+      permissions
+    });
 
-    const newUserId = result.lastInsertRowid;
-
-    // Insert permissions into user_permissions table
-    if (permissions && typeof permissions === 'object') {
-      const insertPerm = db.prepare('INSERT INTO user_permissions (user_id, permission_key, is_granted) VALUES (?, ?, ?)');
-      for (const [key, val] of Object.entries(permissions)) {
-        insertPerm.run(newUserId, key, val ? 1 : 0);
-      }
-    }
-
-    const newUser = db.prepare('SELECT id, branch_id, name, email, phone, role, is_active FROM users WHERE id = ?').get(newUserId);
     res.status(201).json({ user: newUser });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -182,7 +158,7 @@ router.put('/users/:id', authMiddleware, (req, res) => {
   const targetId = parseInt(req.params.id, 10);
   const { branch_id, name, phone, role, password, max_discount_limit, salary_type, base_salary, permissions, is_active } = req.body;
 
-  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(targetId);
+  const existing = getUserById(targetId);
   if (!existing) {
     return res.status(404).json({ error: 'User not found' });
   }
@@ -197,48 +173,19 @@ router.put('/users/:id', authMiddleware, (req, res) => {
   }
 
   try {
-    const update = db.prepare(`
-      UPDATE users
-      SET branch_id = COALESCE(?, branch_id),
-          name = COALESCE(?, name),
-          phone = COALESCE(?, phone),
-          password_hash = COALESCE(?, password_hash),
-          role = COALESCE(?, role),
-          max_discount_limit = COALESCE(?, max_discount_limit),
-          salary_type = COALESCE(?, salary_type),
-          base_salary = COALESCE(?, base_salary),
-          is_active = COALESCE(?, is_active)
-      WHERE id = ?
-    `);
+    const updated = updateUser(targetId, {
+      branch_id,
+      name,
+      phone,
+      password,
+      role,
+      max_discount_limit,
+      salary_type,
+      base_salary,
+      permissions,
+      is_active
+    });
 
-    update.run(
-      branch_id !== undefined ? branch_id : existing.branch_id,
-      name || existing.name,
-      phone !== undefined ? phone : existing.phone,
-      password || existing.password_hash,
-      role || existing.role,
-      max_discount_limit !== undefined ? max_discount_limit : existing.max_discount_limit,
-      salary_type || existing.salary_type,
-      base_salary !== undefined ? base_salary : existing.base_salary,
-      is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active,
-      targetId
-    );
-
-    // Update user_permissions table and sync json
-    if (permissions && typeof permissions === 'object') {
-      db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(JSON.stringify(permissions), targetId);
-
-      const upsertPerm = db.prepare(`
-        INSERT INTO user_permissions (user_id, permission_key, is_granted)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, permission_key) DO UPDATE SET is_granted = excluded.is_granted
-      `);
-      for (const [key, val] of Object.entries(permissions)) {
-        upsertPerm.run(targetId, key, val ? 1 : 0);
-      }
-    }
-
-    const updated = db.prepare('SELECT id, branch_id, name, email, phone, role, is_active FROM users WHERE id = ?').get(targetId);
     res.json({ user: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -256,23 +203,9 @@ router.delete('/users/:id', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Cannot delete your own super admin account while logged in.' });
   }
 
-  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(targetId);
-  if (!existing) return res.status(404).json({ error: 'User not found.' });
-
-  const deleteTx = db.transaction(() => {
-    // Unassign instructor from students
-    db.prepare('UPDATE students SET primary_instructor_id = NULL WHERE primary_instructor_id = ?').run(targetId);
-    // Unassign from leads
-    db.prepare('UPDATE leads SET assigned_to_user_id = NULL WHERE assigned_to_user_id = ?').run(targetId);
-    // Delete permissions
-    db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(targetId);
-    // Delete user
-    db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
-  });
-
   try {
-    deleteTx();
-    res.json({ success: true, message: `Staff user "${existing.name}" (${existing.role}) deleted permanently.` });
+    const result = deleteUser(targetId);
+    res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

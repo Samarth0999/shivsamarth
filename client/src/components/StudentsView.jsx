@@ -4,7 +4,7 @@ import {
   Users, Plus, Search, Filter, Phone, Calendar, 
   CheckCircle, AlertTriangle, ShieldAlert, Award, MessageSquare, 
   DollarSign, FileText, ChevronRight, X, Clock, Car, ExternalLink,
-  Edit, Trash2, Shield
+  Edit, Trash2, Shield, Star
 } from 'lucide-react';
 import { exportStudentReceiptPDF } from '../utils/pdfGenerator';
 
@@ -19,6 +19,7 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
     apiFetch, 
     showToast, 
     triggerWhatsAppReminder,
+    triggerGoogleReviewRequest,
     settings 
   } = useApp();
 
@@ -27,6 +28,7 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
   const [search, setSearch] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [day10Filter, setDay10Filter] = useState(false);
+  const [nearingCompletionFilter, setNearingCompletionFilter] = useState(false);
 
   // Modals state
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -145,6 +147,7 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
       if (selectedBranchId) url += `&branchId=${selectedBranchId}`;
       if (riskFilter) url += `&risk=${riskFilter}`;
       if (day10Filter) url += `&day10Only=true`;
+      if (nearingCompletionFilter) url += `&nearingCompletionOnly=true`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
 
       const data = await apiFetch(url);
@@ -158,7 +161,7 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
 
   useEffect(() => {
     fetchStudents();
-  }, [selectedBranchId, riskFilter, day10Filter, search]);
+  }, [selectedBranchId, riskFilter, day10Filter, nearingCompletionFilter, search]);
 
   // Load instructors and batches when admission modal opens
   useEffect(() => {
@@ -489,8 +492,9 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
           
           {/* Day 10 Filter Toggle */}
           <button
+            type="button"
             onClick={() => setDay10Filter(!day10Filter)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
               day10Filter 
                 ? 'bg-amber-500 text-white shadow-xs' 
                 : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
@@ -498,6 +502,20 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
           >
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>Day 10 Soft Warnings Only</span>
+          </button>
+
+          {/* Course Completing Soon (Google Review) Filter Toggle */}
+          <button
+            type="button"
+            onClick={() => setNearingCompletionFilter(!nearingCompletionFilter)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              nearingCompletionFilter 
+                ? 'bg-amber-600 text-white shadow-xs' 
+                : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <Star className="w-3.5 h-3.5 fill-current" />
+            <span>Review Ready (Completing Soon)</span>
           </button>
 
           {/* Risk Level Filter Tabs */}
@@ -545,6 +563,12 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                     {s.isDay10Warning && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                         DAY 10
+                      </span>
+                    )}
+                    {s.isNearingCompletion && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                        <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-700" />
+                        <span>Review Ready</span>
                       </span>
                     )}
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
@@ -624,6 +648,18 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => triggerGoogleReviewRequest(s)}
+                    className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                      s.isNearingCompletion
+                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                        : 'bg-slate-50 hover:bg-amber-50 text-slate-500 hover:text-amber-700 border border-slate-200'
+                    }`}
+                    title={s.last_review_request_at ? `Google Review sent on ${new Date(s.last_review_request_at).toLocaleDateString()}` : 'Send Google Review WhatsApp Request'}
+                  >
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-600" />
+                  </button>
                   {(isSuperAdmin || hasPermission('manage_students')) && (
                     <button
                       type="button"
@@ -728,6 +764,14 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                     <div className="text-[10px] text-slate-500 mt-1">
                       Target: <span className="font-mono">{s.expected_end_date}</span>
                     </div>
+                    {s.isNearingCompletion && (
+                      <div className="mt-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                          <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-700" />
+                          <span>Review Ready</span>
+                        </span>
+                      </div>
+                    )}
                   </td>
 
                   {/* Financial Status & Risk Matrix Badge */}
@@ -793,6 +837,20 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                           Collect
                         </button>
                       )}
+
+                      {/* Google Review Request WhatsApp Button */}
+                      <button
+                        type="button"
+                        onClick={() => triggerGoogleReviewRequest(s)}
+                        className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                          s.isNearingCompletion
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-300 ring-1 ring-amber-300'
+                            : 'bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-600 border-slate-200'
+                        }`}
+                        title={s.last_review_request_at ? `Google Review sent on ${new Date(s.last_review_request_at).toLocaleDateString()} (click to re-send)` : 'Send Google Review WhatsApp Request'}
+                      >
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-600" />
+                      </button>
 
                       {/* Details Drawer Button */}
                       <button
@@ -1390,6 +1448,38 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Course Completion & Google Review Request Banner */}
+              <div className="p-3.5 rounded-xl border bg-gradient-to-r from-amber-50/80 via-amber-50 to-purple-50/60 border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Star className="w-4 h-4 fill-white" />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>Google Review Feedback Invitation</span>
+                      {studentDetails.student.isNearingCompletion && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                          Course About to Complete
+                        </span>
+                      )}
+                    </h5>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      {studentDetails.student.last_review_request_at 
+                        ? `Last review invite dispatched on ${new Date(studentDetails.student.last_review_request_at).toLocaleString()}`
+                        : `Invite student on WhatsApp to rate ShivSamarth on Google Maps.`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => triggerGoogleReviewRequest(studentDetails.student)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Send Google Review WhatsApp</span>
+                </button>
               </div>
 
               {/* Payment History Ledger */}

@@ -2,25 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   UserCog, Plus, Search, Shield, Edit, Trash2,
-  KeyRound, X, Building2, Phone, Mail
+  KeyRound, X, Building2, Phone, Mail, Save
 } from 'lucide-react';
 import { ChangePasswordModal } from './ChangePasswordModal';
+import { RBAC_CATEGORIES, DEFAULT_ROLE_PERMISSIONS } from '../utils/rbacConfig';
 
-const PERMISSION_KEYS = [
-  { key: 'view_leads', label: 'View Leads' },
-  { key: 'manage_leads', label: 'Manage Leads' },
-  { key: 'manage_students', label: 'Manage Students' },
-  { key: 'manage_vehicles', label: 'Manage Vehicles' },
-  { key: 'manage_batches', label: 'Manage Batches' },
-  { key: 'view_expenses', label: 'View Expenses' },
-  { key: 'edit_expenses', label: 'Edit Expenses' },
-  { key: 'process_refunds', label: 'Process Refunds' },
-  { key: 'delete_payments', label: 'Delete Payments' },
-  { key: 'send_whatsapp_alerts', label: 'Send WhatsApp Alerts' }
-];
+const LOCAL_STAFF_KEY = 'dsms_persisted_staff';
 
 export function StaffView() {
-  const { currentUser, isSuperAdmin, branches, selectedBranchId, apiFetch, showToast } = useApp();
+  const {
+    currentUser,
+    isSuperAdmin,
+    branches,
+    selectedBranchId,
+    apiFetch,
+    showToast,
+    loadInitialData
+  } = useApp();
 
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,12 +47,57 @@ export function StaffView() {
   const [passwordTargetUser, setPasswordTargetUser] = useState(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
+  // Role & Permission Matrix Control Modal
+  const [isRbacModalOpen, setIsRbacModalOpen] = useState(false);
+  const [selectedRbacUser, setSelectedRbacUser] = useState(null);
+  const [rbacPermissions, setRbacPermissions] = useState({});
+  const [rbacDiscountLimit, setRbacDiscountLimit] = useState(0);
+  const [savingRbac, setSavingRbac] = useState(false);
+
+  // Resilient loadStaff: Fetches from backend and maintains persistent localStorage fallback
   const loadStaff = useCallback(async () => {
     setLoading(true);
     try {
       const res = await apiFetch('/api/auth/users');
-      setStaff(res.users || []);
+      let serverUsers = res.users || [];
+
+      // Read locally persisted staff in case server restarted on serverless Vercel
+      let localStaff = [];
+      try {
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) localStaff = JSON.parse(raw);
+      } catch (e) {}
+
+      // If server is missing any custom staff that was created locally, merge and re-sync
+      const serverEmails = new Set(serverUsers.map(u => (u.email || '').toLowerCase()));
+      const missingStaff = localStaff.filter(u => u.email && !serverEmails.has(u.email.toLowerCase()));
+
+      if (missingStaff.length > 0) {
+        for (const staffMember of missingStaff) {
+          try {
+            await apiFetch('/api/auth/users', {
+              method: 'POST',
+              body: JSON.stringify(staffMember)
+            });
+          } catch (syncErr) {
+            console.warn('Staff re-sync notice:', syncErr.message);
+          }
+        }
+        try {
+          const refreshed = await apiFetch('/api/auth/users');
+          if (refreshed.users) serverUsers = refreshed.users;
+        } catch (e) {}
+      }
+
+      // Update local storage with full current roster
+      localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(serverUsers));
+      setStaff(serverUsers);
     } catch (err) {
+      // Fallback to locally stored staff roster if network fails
+      try {
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) setStaff(JSON.parse(raw));
+      } catch (e) {}
       showToast(err.message || 'Failed to load staff directory', 'error');
     } finally {
       setLoading(false);
@@ -78,7 +121,7 @@ export function StaffView() {
       base_salary: 18000,
       max_discount_limit: 0,
       is_active: 1,
-      permissions: {}
+      permissions: { ...DEFAULT_ROLE_PERMISSIONS.instructor }
     });
     setIsModalOpen(true);
   };
@@ -96,9 +139,78 @@ export function StaffView() {
       base_salary: user.base_salary || 0,
       max_discount_limit: user.max_discount_limit || 0,
       is_active: user.is_active ? 1 : 0,
-      permissions: user.parsedPermissions || {}
+      permissions: user.permissions || {}
     });
     setIsModalOpen(true);
+  };
+
+  const openPermissionsModal = (user) => {
+    setSelectedRbacUser(user);
+    setRbacPermissions(user.permissions || {});
+    setRbacDiscountLimit(user.max_discount_limit || 0);
+    setIsRbacModalOpen(true);
+  };
+
+  const handleGrantAll = () => {
+    const all = {};
+    RBAC_CATEGORIES.forEach(cat => {
+      cat.switches.forEach(sw => {
+        all[sw.key] = true;
+      });
+    });
+    setRbacPermissions(all);
+  };
+
+  const handleRevokeAll = () => {
+    const none = {};
+    RBAC_CATEGORIES.forEach(cat => {
+      cat.switches.forEach(sw => {
+        none[sw.key] = false;
+      });
+    });
+    setRbacPermissions(none);
+  };
+
+  const handleApplyRoleDefaults = (role) => {
+    const defaults = DEFAULT_ROLE_PERMISSIONS[role] || {};
+    setRbacPermissions({ ...defaults });
+    showToast(`Applied default permissions for ${role.replace('_', ' ')}!`, 'info');
+  };
+
+  const handleSaveRBAC = async () => {
+    if (!selectedRbacUser) return;
+    setSavingRbac(true);
+    try {
+      await apiFetch(`/api/auth/users/${selectedRbacUser.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          permissions: rbacPermissions,
+          max_discount_limit: Number(rbacDiscountLimit || 0)
+        })
+      });
+
+      // Update local storage cache
+      try {
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) {
+          const list = JSON.parse(raw).map(u =>
+            u.id === selectedRbacUser.id
+              ? { ...u, permissions: rbacPermissions, max_discount_limit: Number(rbacDiscountLimit || 0) }
+              : u
+          );
+          localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(list));
+        }
+      } catch (e) {}
+
+      showToast(`Privileges and discount limits updated for ${selectedRbacUser.name}!`);
+      setIsRbacModalOpen(false);
+      await loadStaff();
+      if (loadInitialData) await loadInitialData(currentUser?.id);
+    } catch (err) {
+      showToast(err.message || 'Failed to update privileges', 'error');
+    } finally {
+      setSavingRbac(false);
+    }
   };
 
   const handleSaveStaff = async (e) => {
@@ -125,14 +237,27 @@ export function StaffView() {
         });
         showToast('Staff account & permissions updated!');
       } else {
-        await apiFetch('/api/auth/users', {
+        const res = await apiFetch('/api/auth/users', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
+
+        // Store in local persistence cache
+        try {
+          const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+          const currentList = raw ? JSON.parse(raw) : [];
+          if (res.user) {
+            currentList.push({ ...res.user, ...payload });
+            localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(currentList));
+          }
+        } catch (e) {}
+
         showToast('Staff account created successfully!');
       }
+
       setIsModalOpen(false);
-      loadStaff();
+      await loadStaff();
+      if (loadInitialData) await loadInitialData(currentUser?.id);
     } catch (err) {
       showToast(err.message || 'Failed to save staff account', 'error');
     } finally {
@@ -141,10 +266,22 @@ export function StaffView() {
   };
 
   const handleDeleteStaff = async (user) => {
+    if (!window.confirm(`Are you sure you want to permanently delete staff account for "${user.name}"?`)) return;
     try {
       await apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' });
+
+      // Remove from local cache
+      try {
+        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
+        if (raw) {
+          const list = JSON.parse(raw).filter(u => u.id !== user.id && u.email !== user.email);
+          localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(list));
+        }
+      } catch (e) {}
+
       showToast(`Removed staff account: ${user.name}`);
-      loadStaff();
+      await loadStaff();
+      if (loadInitialData) await loadInitialData(currentUser?.id);
     } catch (err) {
       showToast(err.message || 'Failed to delete user', 'error');
     }
@@ -185,16 +322,34 @@ export function StaffView() {
           </p>
         </div>
 
-        {(isSuperAdmin || currentUser?.role === 'branch_manager') && (
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm shadow-purple-600/20 transition-colors cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Staff Account</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {(isSuperAdmin || currentUser?.role === 'branch_manager') && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRbacUser(staff[0] || null);
+                  setRbacPermissions(staff[0]?.permissions || {});
+                  setRbacDiscountLimit(staff[0]?.max_discount_limit || 0);
+                  setIsRbacModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+              >
+                <Shield className="w-4 h-4 text-purple-600" />
+                <span>Role &amp; Permission Control</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm shadow-purple-600/20 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Staff Account</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Role Summary KPI Strip */}
@@ -205,11 +360,11 @@ export function StaffView() {
           <div className="text-[11px] text-slate-500 mt-0.5">Active staff accounts</div>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs">
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Admins & Managers</div>
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Admins &amp; Managers</div>
           <div className="text-xl sm:text-2xl font-bold text-purple-700 mt-1">
             {staff.filter(u => u.role === 'super_admin' || u.role === 'branch_manager').length}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Leadership & oversight</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Leadership &amp; oversight</div>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs">
           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Instructors</div>
@@ -223,7 +378,7 @@ export function StaffView() {
           <div className="text-xl sm:text-2xl font-bold text-amber-600 mt-1">
             {staff.filter(u => u.role === 'office_staff').length}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Counselors & cashiers</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Counselors &amp; cashiers</div>
         </div>
       </div>
 
@@ -272,6 +427,7 @@ export function StaffView() {
           <div className="p-10 text-center text-sm text-slate-500">No staff accounts match your filter.</div>
         ) : (
           <>
+          {/* Mobile Roster Cards */}
           <div className="md:hidden divide-y divide-slate-100">
             {filtered.map((user) => (
               <div key={user.id} className="p-4 space-y-2.5">
@@ -300,15 +456,26 @@ export function StaffView() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-0.5">
+                <div className="flex items-center justify-end gap-2 pt-0.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => openPermissionsModal(user)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold transition-colors cursor-pointer"
+                    title="Role & Permission Control"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Permissions</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => openEditModal(user)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     <span>Edit</span>
                   </button>
+
                   {isSuperAdmin && (
                     <>
                       <button
@@ -340,6 +507,7 @@ export function StaffView() {
             ))}
           </div>
 
+          {/* Desktop Roster Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -391,9 +559,17 @@ export function StaffView() {
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
+                          onClick={() => openPermissionsModal(user)}
+                          className="p-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 transition-colors cursor-pointer"
+                          title="Role & Permission Control"
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openEditModal(user)}
-                          className="p-2 rounded-lg bg-slate-50 hover:bg-purple-50 text-slate-600 hover:text-purple-700 transition-colors cursor-pointer"
-                          title="Edit User & Permissions"
+                          className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                          title="Edit User Details"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
@@ -414,7 +590,7 @@ export function StaffView() {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteStaff(user)}
-                                className="p-2 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer"
+                                className="p-2 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition-colors cursor-pointer"
                                 title="Delete Account"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -433,14 +609,14 @@ export function StaffView() {
         )}
       </div>
 
-      {/* Create / Edit Staff Modal */}
+      {/* Create / Edit Staff Details Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-purple-600" />
-                <span>{editingStaff ? `Edit Account: ${editingStaff.name}` : 'Create Staff Account'}</span>
+                <UserCog className="w-5 h-5 text-purple-600" />
+                <span>{editingStaff ? `Edit Account: ${editingStaff.name}` : 'Create New Staff Account'}</span>
               </h3>
               <button
                 type="button"
@@ -487,7 +663,14 @@ export function StaffView() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">System Role</label>
                   <select
                     value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value })}
+                    onChange={(e) => {
+                      const newRole = e.target.value;
+                      setForm({
+                        ...form,
+                        role: newRole,
+                        permissions: { ...(DEFAULT_ROLE_PERMISSIONS[newRole] || {}) }
+                      });
+                    }}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
                   >
                     {isSuperAdmin && <option value="super_admin">Super Admin</option>}
@@ -522,7 +705,7 @@ export function StaffView() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Salary Type & Base (₹)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Salary Type &amp; Base (₹)</label>
                   <div className="flex gap-2">
                     <select
                       value={form.salary_type}
@@ -552,37 +735,16 @@ export function StaffView() {
                 </div>
               </div>
 
-              {/* Granular Individual Access Permissions */}
+              {/* Quick Preset Permissions for selected role */}
               <div>
-                <div className="text-xs font-bold text-slate-800 mb-2">Individual Access Permissions</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {PERMISSION_KEYS.map(perm => {
-                    const checked = Boolean(form.permissions?.[perm.key]);
-                    return (
-                      <label
-                        key={perm.key}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
-                          checked ? 'bg-purple-50 border-purple-200 text-purple-900' : 'bg-slate-50 border-slate-200 text-slate-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              permissions: {
-                                ...form.permissions,
-                                [perm.key]: e.target.checked
-                              }
-                            })
-                          }
-                          className="accent-purple-600 rounded"
-                        />
-                        <span>{perm.label}</span>
-                      </label>
-                    );
-                  })}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-bold text-slate-800">Operational Role Permissions</div>
+                  <span className="text-[11px] text-purple-700 font-semibold">
+                    Configured for {form.role.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 text-[11px] text-slate-600">
+                  Granular permission switches and financial thresholds can also be fine-tuned via the dedicated <strong>Role &amp; Permission Control</strong> button on the staff roster.
                 </div>
               </div>
 
@@ -597,9 +759,9 @@ export function StaffView() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-60"
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-60 shadow-xs"
                 >
-                  {submitting ? 'Saving...' : 'Save Account'}
+                  {submitting ? 'Saving...' : 'Save Staff Account'}
                 </button>
               </div>
             </form>
@@ -607,6 +769,200 @@ export function StaffView() {
         </div>
       )}
 
+      {/* Dedicated Role & Permission Control Modal */}
+      {isRbacModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden text-slate-900">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50/80 via-slate-50 to-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Role &amp; Permission Control
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Configure granular operational privileges, financial discounts, and access matrices.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRbacModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Target Staff Member Selector */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Target Staff Member
+                  </label>
+                  <select
+                    value={selectedRbacUser?.id || ''}
+                    onChange={(e) => {
+                      const u = staff.find(x => x.id === Number(e.target.value));
+                      if (u) {
+                        setSelectedRbacUser(u);
+                        setRbacPermissions(u.permissions || {});
+                        setRbacDiscountLimit(u.max_discount_limit || 0);
+                      }
+                    }}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 bg-white font-bold text-xs sm:text-sm text-slate-900 focus:border-purple-500 outline-none"
+                  >
+                    {staff.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} — ({u.role.replace('_', ' ').toUpperCase()}) • {u.branch_name || 'All Branches'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                  <span className="text-[11px] font-semibold text-slate-500">Presets:</span>
+                  {['instructor', 'branch_manager', 'office_staff'].map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleApplyRoleDefaults(role)}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-purple-50 hover:border-purple-200 text-slate-700 hover:text-purple-700 text-[11px] font-semibold capitalize transition-colors cursor-pointer"
+                    >
+                      {role.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial Privileges & Max Discount */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-xs sm:text-sm text-slate-900">
+                      Financial Privilege: Max Authorized Discount (₹)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Restricts the maximum fee discount this staff member can issue during student admission.
+                    </p>
+                  </div>
+                  <div className="w-full sm:w-48">
+                    <input
+                      type="number"
+                      min="0"
+                      value={rbacDiscountLimit}
+                      onChange={(e) => setRbacDiscountLimit(e.target.value)}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-300 bg-white font-bold font-mono text-sm text-slate-900 focus:border-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Functional Permission Categories Switches */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                    Granular Operational Capabilities
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGrantAll}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Grant All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRevokeAll}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Revoke All
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  {RBAC_CATEGORIES.map(group => (
+                    <div key={group.category} className="space-y-2">
+                      <div className="text-xs font-bold text-purple-900 bg-purple-50/80 px-3 py-1.5 rounded-xl border border-purple-100">
+                        {group.category}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {group.switches.map(sw => {
+                          const isChecked = Boolean(rbacPermissions?.[sw.key]);
+                          return (
+                            <label
+                              key={sw.key}
+                              className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                                isChecked
+                                  ? 'bg-purple-50/40 border-purple-200'
+                                  : 'bg-white border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) =>
+                                  setRbacPermissions({
+                                    ...rbacPermissions,
+                                    [sw.key]: e.target.checked
+                                  })
+                                }
+                                className="mt-0.5 accent-purple-600 rounded w-4 h-4 cursor-pointer shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900">
+                                  {sw.label}
+                                </div>
+                                <div className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                                  {sw.desc}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500">
+                Configuring: <strong className="text-slate-800">{selectedRbacUser?.name}</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRbacModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRBAC}
+                  disabled={savingRbac}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold cursor-pointer shadow-xs disabled:opacity-60 transition-colors"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingRbac ? 'Saving Privileges...' : 'Save Privileges'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Modal */}
       <ChangePasswordModal
         isOpen={isPasswordModalOpen}
         onClose={() => {
@@ -618,4 +974,3 @@ export function StaffView() {
     </div>
   );
 }
-

@@ -1,42 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  Settings, Sliders, Shield, Award, DollarSign, 
-  Receipt, Save, Plus, CheckCircle, AlertTriangle, Users, 
-  ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation, KeyRound,
+import {
+  Settings, Sliders, Shield, Award, DollarSign,
+  Receipt, Save, Plus, CheckCircle, AlertTriangle, Users,
+  ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation,
   Building2, ArrowRight
 } from 'lucide-react';
-import { ChangePasswordModal } from './ChangePasswordModal';
 
 export function SettingsView() {
-  const { 
-    currentUser, 
+  const {
+    currentUser,
     isSuperAdmin,
-    settings, 
-    setSettings, 
-    courseTypes, 
-    paymentModes, 
-    expenseCategories, 
-    usersList, 
+    settings,
+    setSettings,
+    courseTypes,
+    paymentModes,
+    expenseCategories,
     branches,
-    apiFetch, 
+    apiFetch,
     showToast,
     loadInitialData,
     setActiveTab: setPortalTab
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'branches' | 'thresholds' | 'courses' | 'categories' | 'rbac'
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [passwordTargetUser, setPasswordTargetUser] = useState(null);
-  
+  const [activeTab, setActiveTab] = useState('branches'); // 'branches' | 'thresholds' | 'courses' | 'categories'
+
   // Dynamic Settings form
   const [formSettings, setFormSettings] = useState({
     day_10_warning_threshold: settings.day_10_warning_threshold || '10',
     risk_low_remaining_days: settings.risk_low_remaining_days || '15',
     risk_high_remaining_days: settings.risk_high_remaining_days || '5',
     geofence_radius_meters: settings.geofence_radius_meters || '100',
-    app_name: settings.app_name || 'Apex Pro Driving Academy',
-    whatsapp_fee_reminder_template: settings.whatsapp_fee_reminder_template || ''
+    app_name: settings.app_name || 'ShivSamarth Motor Driving School',
+    whatsapp_fee_reminder_template: settings.whatsapp_fee_reminder_template || '',
+    google_review_url: settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review',
+    google_review_trigger_days: settings.google_review_trigger_days || '3',
+    whatsapp_google_review_template: settings.whatsapp_google_review_template || ''
   });
 
   // Course Types form
@@ -59,68 +58,6 @@ export function SettingsView() {
   const [newCatName, setNewCatName] = useState('');
   const [editingCatId, setEditingCatId] = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
-
-  // RBAC User Permissions Matrix editing
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userPermissions, setUserPermissions] = useState({});
-  const [userDiscountLimit, setUserDiscountLimit] = useState(0);
-  const [selectedUserDetails, setSelectedUserDetails] = useState({
-    name: '',
-    phone: '',
-    role: '',
-    branch_id: ''
-  });
-
-  // Staff registration state
-  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
-  const [staffForm, setStaffForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    role: 'instructor',
-    branch_id: '',
-    password: 'password123',
-    salary_type: 'monthly',
-    base_salary: 18000,
-    max_discount_limit: 0
-  });
-
-  const handleCreateStaff = async (e) => {
-    e.preventDefault();
-    if (!staffForm.name.trim() || !staffForm.email.trim() || !staffForm.role) {
-      showToast('Name, Email, and Role are required.', 'error');
-      return;
-    }
-    try {
-      await apiFetch('/api/auth/users', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...staffForm,
-          name: staffForm.name.trim(),
-          email: staffForm.email.trim().toLowerCase(),
-          branch_id: staffForm.branch_id ? Number(staffForm.branch_id) : (branches[0]?.id || 1),
-          base_salary: Number(staffForm.base_salary) || 0,
-          max_discount_limit: Number(staffForm.max_discount_limit) || 0
-        })
-      });
-      showToast(`Staff member "${staffForm.name}" registered successfully!`);
-      setIsAddStaffOpen(false);
-      setStaffForm({
-        name: '',
-        email: '',
-        phone: '',
-        role: 'instructor',
-        branch_id: '',
-        password: 'password123',
-        salary_type: 'monthly',
-        base_salary: 18000,
-        max_discount_limit: 0
-      });
-      await loadInitialData(currentUser?.id || 1);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
 
   // Branches state & management (Module 1)
   const [isAddBranchOpen, setIsAddBranchOpen] = useState(false);
@@ -230,28 +167,13 @@ export function SettingsView() {
       risk_low_remaining_days: settings.risk_low_remaining_days || '15',
       risk_high_remaining_days: settings.risk_high_remaining_days || '5',
       geofence_radius_meters: settings.geofence_radius_meters || '100',
-      app_name: settings.app_name || 'Apex Pro Driving Academy',
-      whatsapp_fee_reminder_template: settings.whatsapp_fee_reminder_template || ''
+      app_name: settings.app_name || 'ShivSamarth Motor Driving School',
+      whatsapp_fee_reminder_template: settings.whatsapp_fee_reminder_template || '',
+      google_review_url: settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review',
+      google_review_trigger_days: settings.google_review_trigger_days || '3',
+      whatsapp_google_review_template: settings.whatsapp_google_review_template || ''
     });
   }, [settings]);
-
-  useEffect(() => {
-    if (usersList.length > 0 && !selectedUser) {
-      handleSelectUserForRBAC(usersList[0]);
-    }
-  }, [usersList]);
-
-  const handleSelectUserForRBAC = (u) => {
-    setSelectedUser(u);
-    setUserPermissions(u.permissions || {});
-    setUserDiscountLimit(u.max_discount_limit || 0);
-    setSelectedUserDetails({
-      name: u.name || '',
-      phone: u.phone || '',
-      role: u.role || 'instructor',
-      branch_id: u.branch_id || ''
-    });
-  };
 
   // Save Dynamic System Settings
   const handleSaveSettings = async (e) => {
@@ -430,138 +352,6 @@ export function SettingsView() {
     }
   };
 
-  // Save RBAC Matrix & Profile updates for selected user
-  const handleSaveRBAC = async () => {
-    if (!selectedUser) return;
-    try {
-      await apiFetch(`/api/auth/users/${selectedUser.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: selectedUserDetails.name,
-          phone: selectedUserDetails.phone,
-          role: selectedUserDetails.role,
-          branch_id: selectedUserDetails.branch_id ? Number(selectedUserDetails.branch_id) : null,
-          permissions: userPermissions,
-          max_discount_limit: Number(userDiscountLimit)
-        })
-      });
-      showToast(`Privileges and account details updated for ${selectedUserDetails.name || selectedUser.name}!`);
-      loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  // Delete Staff User (Super Admin Master Delete)
-  const handleDeleteUser = async (user) => {
-    if (user.id === currentUser?.id) {
-      showToast('You cannot delete your own logged-in account.', 'error');
-      return;
-    }
-    if (!window.confirm(`[MASTER DELETE: Super Admin]\n\nAre you sure you want to permanently delete staff user "${user.name}" (${user.role})?\n\nTheir permissions and instructor/lead assignments will be safely unlinked.`)) {
-      return;
-    }
-    try {
-      const res = await apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' });
-      showToast(res.message || 'Staff user deleted permanently');
-      if (selectedUser?.id === user.id) {
-        setSelectedUser(null);
-      }
-      loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  const togglePermission = (key) => {
-    setUserPermissions(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  const rbacFunctionCategories = [
-    {
-      category: '1. Students, Admissions & Lessons',
-      switches: [
-        { key: 'manage_students', label: 'Create & Edit Student Admissions', desc: 'Register new students, issue Enroll IDs, and edit student profiles' },
-        { key: 'delete_students', label: 'Delete Student Records', desc: 'Permanently remove student profiles, attendance, and logs' },
-        { key: 'manage_attendance', label: 'Record Attendance & Lesson Hours', desc: 'Mark daily driving lessons, absent penalties, and instructor logs' },
-        { key: 'schedule_rto', label: 'Schedule RTO Driving License Tests', desc: 'Book RTO driving test dates subject to hard gate checks' }
-      ]
-    },
-    {
-      category: '2. Fee Collections & Payment Ledger',
-      switches: [
-        { key: 'collect_payments', label: 'Collect Course Fee Payments', desc: 'Accept cash/UPI fee payments and generate official PDF receipts' },
-        { key: 'edit_payments', label: 'Edit Existing Payment Receipts', desc: 'Correct payment amounts, dates, modes, and receipt references' },
-        { key: 'delete_payments', label: 'Delete / Void Fee Payments', desc: 'Void payment receipts and automatically adjust pending balances' },
-        { key: 'process_refunds', label: 'Process Student Fee Refunds', desc: 'Issue credit balances or fee refunds for discontinued courses' }
-      ]
-    },
-    {
-      category: '3. Daily Operational Expenses & Accounting',
-      switches: [
-        { key: 'view_expenses', label: 'View Operational Expenses & Costs', desc: 'Access expense tracker, fuel logs, and vehicle maintenance costs' },
-        { key: 'edit_expenses', label: 'Add & Edit Operational Expenses', desc: 'Record daily branch fuel, repairs, tea, and RTO office challans' },
-        { key: 'delete_expenses', label: 'Delete Operational Expense Records', desc: 'Remove recorded expense entries from ledger' }
-      ]
-    },
-    {
-      category: '4. Fleet Vehicles & Maintenance',
-      switches: [
-        { key: 'manage_vehicles', label: 'Register & Edit Fleet Vehicles', desc: 'Add new cars, dual-control specs, and update insurance/PUC/fitness' },
-        { key: 'delete_vehicles', label: 'Delete Vehicles from Fleet', desc: 'Retire or delete vehicle records and decouple from rotations' }
-      ]
-    },
-    {
-      category: '5. Batch Time Slots & Rotations',
-      switches: [
-        { key: 'manage_batches', label: 'Create & Edit Batch Time Slots', desc: 'Manage 1-hour time slots, capacity limits, and batch names' },
-        { key: 'delete_batches', label: 'Delete Batch Slots', desc: 'Remove time slots and safely unassign enrolled trainees' },
-        { key: 'manage_rotations', label: 'Schedule Fleet Rotations', desc: 'Schedule weekly vehicle wear-balancing swaps across slots' },
-        { key: 'delete_rotations', label: 'Delete Rotation Schedules', desc: 'Remove vehicle rotation assignments' }
-      ]
-    },
-    {
-      category: '6. Website Inquiries & Leads Pipeline',
-      switches: [
-        { key: 'manage_leads', label: 'View & Edit Website Inquiries', desc: 'Review leads from public website, phone calls, and notes' },
-        { key: 'delete_leads', label: 'Delete Leads & Inquiries', desc: 'Remove cold or spam inquiries from pipeline' },
-        { key: 'convert_leads', label: 'Convert Inquiries to Enrolled Students', desc: 'Convert prospect directly into student with advance receipt' }
-      ]
-    },
-    {
-      category: '7. Customer Engagement & Administration',
-      switches: [
-        { key: 'send_whatsapp_alerts', label: 'Send WhatsApp Fee & Lesson Alerts', desc: 'Trigger pre-filled WhatsApp reminders to students and parents' },
-        { key: 'export_reports', label: 'Export PDF Financial Reports', desc: 'Download official collection and defaulter summary PDF audits' },
-        { key: 'view_payroll', label: 'View Staff Wages & Payroll Engine', desc: 'Inspect monthly instructor wages and salary calculations' },
-        { key: 'manage_settings', label: 'Manage Academy Settings & Courses', desc: 'Access course packages, payment modes, and thresholds' }
-      ]
-    }
-  ];
-
-  const handleGrantAll = () => {
-    const all = {};
-    rbacFunctionCategories.forEach(cat => {
-      cat.switches.forEach(sw => {
-        all[sw.key] = true;
-      });
-    });
-    setUserPermissions(all);
-  };
-
-  const handleRevokeAll = () => {
-    const none = {};
-    rbacFunctionCategories.forEach(cat => {
-      cat.switches.forEach(sw => {
-        none[sw.key] = false;
-      });
-    });
-    setUserPermissions(none);
-  };
-
   return (
     <div className="space-y-6">
 
@@ -575,111 +365,111 @@ export function SettingsView() {
         </p>
       </div>
 
-      {/* Top 3 Administration Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Top 4 Administration Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Branch Management */}
         <div
           onClick={() => setActiveTab('branches')}
-          className={`bg-white rounded-2xl border p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${
-            activeTab === 'branches' ? 'border-purple-400 ring-2 ring-purple-100' : 'border-slate-200/80 hover:border-purple-200'
-          }`}
+          className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'branches' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
+            }`}
         >
           <div>
-            <div className="flex items-center justify-between gap-2 mb-5">
+            <div className="flex items-center justify-between gap-2 mb-4">
               <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
                 <Building2 className="w-5 h-5" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
                 {branches.length} {branches.length === 1 ? 'Branch' : 'Branches'} Active
               </span>
             </div>
-            <h3 className="text-base font-bold text-slate-900">Branch Management</h3>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Manage driving school locations, GPS coordinates, contact details, and activation status.
+            <h3 className="text-sm font-bold text-slate-900">Branch Management</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Manage driving school locations, GPS coordinates, and contact details.
             </p>
           </div>
-          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+          <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
             <span>Configure</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
 
-        {/* Card 2: Role & Permission Control */}
+        {/* Card 2: Operational Thresholds & WhatsApp */}
         <div
-          onClick={() => setActiveTab('rbac')}
-          className={`bg-white rounded-2xl border p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${
-            activeTab === 'rbac' ? 'border-purple-400 ring-2 ring-purple-100' : 'border-slate-200/80 hover:border-purple-200'
-          }`}
-        >
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <Shield className="w-5 h-5" />
-              </div>
-              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
-                4 System Roles
-              </span>
-            </div>
-            <h3 className="text-base font-bold text-slate-900">Role & Permission Control</h3>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Configure system roles (Super Admin, Branch Admin, Instructor, Front Office) and default permission matrices.
-            </p>
-          </div>
-          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
-            <span>Configure</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </div>
-
-        {/* Card 3: Staff Accounts & Access */}
-        <div
-          onClick={() => setPortalTab('staff')}
-          className="bg-white rounded-2xl border border-slate-200/80 hover:border-purple-200 p-6 shadow-2xs transition-all cursor-pointer flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-semibold">
-                Staff Directory
-              </span>
-            </div>
-            <h3 className="text-base font-bold text-slate-900">Staff Accounts & Access</h3>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Add, modify, and manage employee accounts, multi-branch assignments, and custom override permissions.
-            </p>
-          </div>
-          <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
-            <span>Configure</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Compact Secondary Settings Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200/80 w-fit">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'branches', label: 'Branches & Geofence' },
-          { id: 'rbac', label: 'Role & Permission Matrix' },
-          { id: 'thresholds', label: 'Thresholds & Triggers' },
-          { id: 'courses', label: 'Course Packages' },
-          { id: 'categories', label: 'Payment & Expense Modes' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-purple-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          onClick={() => setActiveTab('thresholds')}
+          className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'thresholds' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
             }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Sliders className="w-5 h-5" />
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-semibold">
+                Automation
+              </span>
+            </div>
+            <h3 className="text-sm font-bold text-slate-900">Thresholds &amp; WhatsApp</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Configure Day 10 fee reminders, geofence radius, and automated review templates.
+            </p>
+          </div>
+          <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        {/* Card 3: Course Packages & Pricing */}
+        <div
+          onClick={() => setActiveTab('courses')}
+          className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'courses' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
+            }`}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Award className="w-5 h-5" />
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">
+                {courseTypes.length} Packages
+              </span>
+            </div>
+            <h3 className="text-sm font-bold text-slate-900">Course Packages &amp; Pricing</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Define training curricula, syllabus durations, base fee pricing, and license options.
+            </p>
+          </div>
+          <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        {/* Card 4: Payment & Expense Modes */}
+        <div
+          onClick={() => setActiveTab('categories')}
+          className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'categories' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
+            }`}
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold">
+                {paymentModes.length} Modes · {expenseCategories.length} Tags
+              </span>
+            </div>
+            <h3 className="text-sm font-bold text-slate-900">Payment &amp; Expense Modes</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Configure accepted payment methods (UPI, Cash) and operational expense tags.
+            </p>
+          </div>
+          <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+            <span>Configure</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
       </div>
 
       {/* ============================================================== */}
@@ -795,7 +585,7 @@ export function SettingsView() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
-            
+
             {/* Day 10 Soft Warning Threshold */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
               <label className="block font-bold text-slate-800 mb-1">Day 10 Soft Warning Threshold (Training Days)</label>
@@ -877,6 +667,56 @@ export function SettingsView() {
               />
             </div>
 
+            {/* Google Review URL */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                <span>Google Business Profile Review Link</span>
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">Google Maps</span>
+              </label>
+              <input
+                type="url"
+                placeholder="https://g.page/r/your-google-review-link/review"
+                value={formSettings.google_review_url}
+                onChange={e => setFormSettings({ ...formSettings, google_review_url: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-xs text-slate-800"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Short link from Google Business Profile (Ask for reviews)</p>
+            </div>
+
+            {/* Google Review Trigger Threshold */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <label className="block font-bold text-slate-800 mb-1">
+                Course Completion Review Trigger (Days Remaining)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={formSettings.google_review_trigger_days}
+                onChange={e => setFormSettings({ ...formSettings, google_review_trigger_days: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono text-sm"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Triggers review prompt when remaining course days &le; this number (e.g. 3 days before finish)</p>
+            </div>
+
+            {/* WhatsApp Google Review Template */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 sm:col-span-2">
+              <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                <span>WhatsApp Google Review Invitation Template</span>
+                <span className="text-[11px] text-purple-700 font-semibold">Course Completion Message</span>
+              </label>
+              <p className="text-[11px] text-slate-500 mb-2">
+                Available tags: <code className="bg-slate-200 px-1 py-0.5 rounded">{`{student_name}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{school_name}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{branch_name}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{course_name}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{days_completed}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{total_days}`}</code>, <code className="bg-slate-200 px-1 py-0.5 rounded">{`{google_review_link}`}</code>
+              </p>
+              <textarea
+                rows={4}
+                value={formSettings.whatsapp_google_review_template}
+                onChange={e => setFormSettings({ ...formSettings, whatsapp_google_review_template: e.target.value })}
+                placeholder="Congratulations on nearing completion of your driving training! Please share a 5-star Google review..."
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs"
+              />
+            </div>
+
           </div>
         </form>
       )}
@@ -922,16 +762,14 @@ export function SettingsView() {
                     <td className="py-3 px-3 font-bold text-slate-800">{c.duration_days} Days</td>
                     <td className="py-3 px-3 font-mono font-black text-blue-700 text-sm">₹{c.base_fee}</td>
                     <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        c.is_license_course ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${c.is_license_course ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
+                        }`}>
                         {c.is_license_course ? 'License Included' : 'Practice Only'}
                       </span>
                     </td>
                     <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        c.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${c.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                        }`}>
                         {c.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -1127,7 +965,7 @@ export function SettingsView() {
       {/* ============================================================== */}
       {activeTab === 'categories' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          
+
           {/* Payment Modes */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
@@ -1295,292 +1133,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* 4. RBAC PRIVILEGE MATRIX (Module 3) */}
-      {/* ============================================================== */}
-      {activeTab === 'rbac' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="font-bold text-base text-slate-900">Granular Role-Based Access Control (RBAC) Matrix</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Toggle CRUD rights, financial privileges (max discount limit ₹, refunds), and WhatsApp switches per user</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsAddStaffOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add New Staff</span>
-              </button>
-              <button
-                onClick={handleSaveRBAC}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save Privileges</span>
-              </button>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
-            
-            {/* User Selector List */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Team Roster</span>
-                <button
-                  type="button"
-                  onClick={() => setIsAddStaffOpen(true)}
-                  className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Add Staff</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddStaffOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 p-2 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5 text-emerald-600" />
-                <span>+ Register New Staff Member</span>
-              </button>
-              <div className="space-y-1.5 max-h-96 overflow-y-auto">
-                {usersList.map(u => (
-                  <div
-                    key={u.id}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
-                      selectedUser?.id === u.id ? 'bg-blue-50 border-blue-500 font-bold' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSelectUserForRBAC(u)}
-                      className="text-left flex-1 min-w-0"
-                    >
-                      <div className="text-slate-800 truncate">{u.name}</div>
-                      <div className="text-[11px] text-slate-500 capitalize">{u.role.replace('_', ' ')} • {u.branch_name || 'All'}</div>
-                    </button>
-                    <div className="flex items-center gap-1 ml-1 shrink-0">
-                      {(isSuperAdmin || u.id === currentUser?.id) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPasswordTargetUser(u);
-                            setIsPasswordModalOpen(true);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
-                          title={isSuperAdmin && u.id !== currentUser?.id ? `Master Reset Password for ${u.name}` : 'Change Password'}
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {isSuperAdmin && u.id !== currentUser?.id && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteUser(u); }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="Master Delete Staff User (Super Admin)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Privilege Toggles for Selected User */}
-            {selectedUser && (
-              <div className="md:col-span-2 space-y-5">
-                
-                {/* Account Details & Branch Assignment */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-slate-800">Staff Account & Branch Assignment</h4>
-                    {isSuperAdmin && (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                        Super Admin Master Edit
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-600 mb-1">Full Name</label>
-                      <input
-                        type="text"
-                        value={selectedUserDetails.name}
-                        onChange={e => setSelectedUserDetails({ ...selectedUserDetails, name: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-600 mb-1">Mobile Phone</label>
-                      <input
-                        type="tel"
-                        value={selectedUserDetails.phone}
-                        onChange={e => setSelectedUserDetails({ ...selectedUserDetails, phone: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-mono"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-600 mb-1">Role Designation</label>
-                      <select
-                        value={selectedUserDetails.role}
-                        onChange={e => setSelectedUserDetails({ ...selectedUserDetails, role: e.target.value })}
-                        disabled={!isSuperAdmin || selectedUser.id === currentUser?.id}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-semibold disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-                        <option value="super_admin">Super Admin (Master)</option>
-                        <option value="branch_manager">Branch Manager</option>
-                        <option value="instructor">Driving Instructor</option>
-                        <option value="office_staff">Office Staff</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-600 mb-1">Assigned Branch</label>
-                      <select
-                        value={selectedUserDetails.branch_id || ''}
-                        onChange={e => setSelectedUserDetails({ ...selectedUserDetails, branch_id: e.target.value ? Number(e.target.value) : '' })}
-                        disabled={!isSuperAdmin}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl font-semibold disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-                        <option value="">All Branches (HQ)</option>
-                        {branches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Staff Security & Password Control */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                        <KeyRound className="w-4 h-4 text-amber-600" />
-                        <span>Staff Security & Password Control</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {isSuperAdmin
-                          ? (selectedUser.id === currentUser?.id
-                              ? 'Change your master login password.'
-                              : `Super Admin Master Privilege: Set or reset password for ${selectedUser.name}.`)
-                          : 'Change your personal login password.'}
-                      </p>
-                    </div>
-                    {(isSuperAdmin || selectedUser.id === currentUser?.id) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPasswordTargetUser(selectedUser);
-                          setIsPasswordModalOpen(true);
-                        }}
-                        className="px-3.5 py-2 bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-                      >
-                        <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                        <span>
-                          {isSuperAdmin && selectedUser.id !== currentUser?.id
-                            ? `Reset Password for ${selectedUser.name.split(' ')[0]}`
-                            : 'Change My Password'}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Financial Controls */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                  <h4 className="font-bold text-slate-800 mb-2">Financial Privileges & Discount Limit</h4>
-                  <div>
-                    <label className="block text-slate-600 mb-1">Max Authorized Discount Limit (₹)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={userDiscountLimit}
-                      onChange={e => setUserDiscountLimit(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">Staff cannot apply discounts higher than this amount during student registration.</p>
-                  </div>
-                </div>
-
-                {/* Granular Privilege Toggles - Every Function in the System */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-xs">Core CRUD & Operational Switches</h4>
-                      <p className="text-[10px] text-slate-500">Fine-grained access control toggles for every operational capability</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleGrantAll}
-                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold transition-colors"
-                      >
-                        Grant All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRevokeAll}
-                        className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-bold transition-colors"
-                      >
-                        Revoke All
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
-                    {rbacFunctionCategories.map((group) => (
-                      <div key={group.category} className="space-y-1.5">
-                        <div className="text-[10px] font-bold text-blue-800 uppercase tracking-wider bg-blue-50/70 px-2.5 py-1 rounded-md border border-blue-100">
-                          {group.category}
-                        </div>
-                        <div className="space-y-1 pl-1">
-                          {group.switches.map((item) => {
-                            const isGranted = Boolean(userPermissions[item.key]);
-                            return (
-                              <div 
-                                key={item.key} 
-                                className="flex justify-between items-center py-2 px-2 hover:bg-white rounded-xl transition-colors border border-transparent hover:border-slate-200"
-                              >
-                                <div className="pr-3">
-                                  <div className="font-semibold text-slate-800 text-xs">{item.label}</div>
-                                  <div className="text-[10px] text-slate-400 mt-0.5">{item.desc}</div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => togglePermission(item.key)}
-                                  className={`text-[11px] font-bold px-3 py-1 rounded-lg transition-all shrink-0 ${
-                                    isGranted 
-                                      ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700' 
-                                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                  }`}
-                                >
-                                  {isGranted ? 'Enabled' : 'Disabled'}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
 
       {/* ADD BRANCH MODAL */}
       {isAddBranchOpen && (
@@ -1824,179 +1377,6 @@ export function SettingsView() {
           </div>
         </div>
       )}
-
-      {/* Modal: Add New Staff Member */}
-      {isAddStaffOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden p-6 space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                  <Users className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900">Add New Staff Member</h3>
-                  <p className="text-xs text-slate-500">Register instructor, manager, or office counselor</p>
-                </div>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setIsAddStaffOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rahul Santosh Kadam"
-                    required
-                    value={staffForm.name}
-                    onChange={e => setStaffForm({ ...staffForm, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Contact Phone Number *</label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. 9822112233"
-                    value={staffForm.phone}
-                    onChange={e => setStaffForm({ ...staffForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Official Email Address *</label>
-                  <input
-                    type="email"
-                    placeholder="rahul@shivsamarth.com"
-                    required
-                    value={staffForm.email}
-                    onChange={e => setStaffForm({ ...staffForm, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Initial Login Password</label>
-                  <input
-                    type="text"
-                    value={staffForm.password}
-                    onChange={e => setStaffForm({ ...staffForm, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono"
-                    placeholder="password123"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Designated Role *</label>
-                  <select
-                    value={staffForm.role}
-                    onChange={e => setStaffForm({ ...staffForm, role: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
-                  >
-                    <option value="instructor">Driving Instructor</option>
-                    <option value="branch_manager">Branch Manager</option>
-                    <option value="office_staff">Counselor / Office Desk</option>
-                    <option value="super_admin">Super Admin (Executive Owner)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Assigned Branch</label>
-                  <select
-                    value={staffForm.branch_id}
-                    onChange={e => setStaffForm({ ...staffForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold"
-                  >
-                    <option value="">Select Branch...</option>
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>📍 {b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                <div className="font-bold text-slate-700 flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Salary & Financial Privileges</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Salary Type</label>
-                    <select
-                      value={staffForm.salary_type}
-                      onChange={e => setStaffForm({ ...staffForm, salary_type: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                    >
-                      <option value="monthly">Monthly Fixed</option>
-                      <option value="daily">Per Day Wage</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Base Salary (₹)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={staffForm.base_salary}
-                      onChange={e => setStaffForm({ ...staffForm, base_salary: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Max Discount (₹)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={staffForm.max_discount_limit}
-                      onChange={e => setStaffForm({ ...staffForm, max_discount_limit: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddStaffOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Register Staff Member</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Modal */}
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => {
-          setIsPasswordModalOpen(false);
-          setPasswordTargetUser(null);
-        }}
-        targetUser={passwordTargetUser}
-        onSuccess={() => loadInitialData(currentUser?.id)}
-      />
 
     </div>
   );

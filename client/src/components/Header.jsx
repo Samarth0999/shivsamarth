@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Search, Building2, Bell, Car, X, Phone, Globe, Menu,
-  LayoutGrid, KeyRound, LogOut, Mail
+  LayoutGrid, KeyRound, LogOut, Mail, Clock
 } from 'lucide-react';
 import { getNavItems, getNavSections } from '../utils/navConfig';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -34,8 +34,11 @@ export function Header() {
     isSearching,
     performSearch,
     setViewMode,
-    logoutUser
+    logoutUser,
+    sessionExpiresAt
   } = useApp();
+
+  const remainingMinutes = sessionExpiresAt ? Math.max(0, Math.ceil((sessionExpiresAt - Date.now()) / (60 * 1000))) : null;
 
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -417,6 +420,18 @@ export function Header() {
                     {currentUser?.branch_name || 'All Branches'}
                   </span>
                 </div>
+
+                {remainingMinutes !== null && (
+                  <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5 text-slate-500 font-medium">
+                      <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span>Auto-Logout:</span>
+                    </span>
+                    <span className="font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded text-[10px]">
+                      {remainingMinutes > 1 ? `${remainingMinutes}m left` : '< 1m left'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

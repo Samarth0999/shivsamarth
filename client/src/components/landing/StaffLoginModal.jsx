@@ -30,9 +30,11 @@ export function StaffLoginModal({ isOpen, onClose, onLoginSuccess }) {
         throw new Error(data.error || 'Authentication failed. Please check credentials.');
       }
 
-      // Store in localStorage
+      // Store in localStorage with 1-hour session expiration
+      const expiresAt = Date.now() + 60 * 60 * 1000;
       localStorage.setItem('auth_token', data.token);
       localStorage.setItem('auth_user', JSON.stringify(data.user));
+      localStorage.setItem('auth_expires_at', String(expiresAt));
 
       onLoginSuccess(data.user, data.token);
       onClose();

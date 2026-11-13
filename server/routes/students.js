@@ -8,9 +8,13 @@ function computeFinancialRisk(student, settings) {
   const lowThreshold = parseInt(settings.risk_low_remaining_days || '15', 10);
   const highThreshold = parseInt(settings.risk_high_remaining_days || '5', 10);
   const day10Threshold = parseInt(settings.day_10_warning_threshold || '10', 10);
+  const reviewTriggerDays = parseInt(settings.google_review_trigger_days || '3', 10);
 
   const remainingDays = Math.max(0, student.total_course_days - student.days_completed);
   const isDay10Warning = student.days_completed >= day10Threshold && student.pending_balance > 0;
+
+  // Course is about to complete when remainingDays <= reviewTriggerDays or days_completed >= total_course_days
+  const isNearingCompletion = (remainingDays <= reviewTriggerDays && student.days_completed >= Math.max(1, student.total_course_days - reviewTriggerDays)) || (student.days_completed >= student.total_course_days);
 
   let riskLevel = 'LOW'; // 'LOW', 'MEDIUM', 'HIGH'
   let riskColor = 'green';
@@ -36,6 +40,7 @@ function computeFinancialRisk(student, settings) {
   return {
     remainingDays,
     isDay10Warning,
+    isNearingCompletion,
     riskLevel,
     riskColor,
     isRtoGateUnlocked
@@ -45,7 +50,7 @@ function computeFinancialRisk(student, settings) {
 // Get students list with filters, branch isolation, and risk analytics
 router.get('/', (req, res) => {
   const branchFilter = getAuthorizedBranchFilter(req);
-  const { status, risk, day10Only, batchId, search } = req.query;
+  const { status, risk, day10Only, nearingCompletionOnly, batchId, search } = req.query;
 
   // Read current system settings
   const settingsRows = db.prepare('SELECT * FROM settings').all();
@@ -113,6 +118,10 @@ router.get('/', (req, res) => {
   // Filter in memory for risk or day10 if requested
   if (day10Only === 'true') {
     students = students.filter(s => s.isDay10Warning);
+  }
+
+  if (nearingCompletionOnly === 'true') {
+    students = students.filter(s => s.isNearingCompletion);
   }
 
   if (risk) {
@@ -700,6 +709,20 @@ router.post('/:id/whatsapp-reminder', (req, res) => {
   db.prepare(`
     UPDATE students
     SET last_whatsapp_reminder_at = ?
+    WHERE id = ?
+  `).run(now, id);
+
+  res.json({ success: true, sent_at: now });
+});
+
+// Log Google review request sent
+router.post('/:id/google-review-request', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE students
+    SET last_review_request_at = ?
     WHERE id = ?
   `).run(now, id);
 

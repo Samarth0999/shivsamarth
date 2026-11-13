@@ -2,30 +2,58 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 
 const AppContext = createContext(null);
 
-function readStoredUser() {
-  try {
-    const raw = localStorage.getItem('auth_user');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
+const SESSION_DURATION_MS = 60 * 60 * 1000; // 1 hour session auto-logout
 
 function clearStoredSession() {
   localStorage.removeItem('auth_token');
   localStorage.removeItem('auth_user');
+  localStorage.removeItem('auth_expires_at');
   localStorage.removeItem('view_mode');
   localStorage.removeItem('active_tab');
   localStorage.removeItem('selected_branch_id');
 }
 
+function checkAndGetValidSession() {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      clearStoredSession();
+      return { token: null, user: null, expiresAt: null };
+    }
+
+    const rawExpiresAt = localStorage.getItem('auth_expires_at');
+    if (rawExpiresAt) {
+      const expiresAt = Number(rawExpiresAt);
+      if (Date.now() >= expiresAt) {
+        clearStoredSession();
+        return { token: null, user: null, expiresAt: null };
+      }
+      const rawUser = localStorage.getItem('auth_user');
+      const user = rawUser ? JSON.parse(rawUser) : null;
+      return { token, user, expiresAt };
+    }
+
+    // Existing session without expiry timestamp: start 1-hour session from now
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
+    localStorage.setItem('auth_expires_at', String(expiresAt));
+    const rawUser = localStorage.getItem('auth_user');
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    return { token, user, expiresAt };
+  } catch {
+    clearStoredSession();
+    return { token: null, user: null, expiresAt: null };
+  }
+}
+
 export function AppProvider({ children }) {
-  const initialToken = localStorage.getItem('auth_token');
-  const initialUser = initialToken ? readStoredUser() : null;
+  const initialSession = checkAndGetValidSession();
+  const initialToken = initialSession.token;
+  const initialUser = initialSession.user;
   const initialViewMode = initialToken && (localStorage.getItem('view_mode') || 'staff') === 'staff'
     ? 'staff'
     : 'landing';
 
+  const [sessionExpiresAt, setSessionExpiresAt] = useState(initialSession.expiresAt);
   const [currentUser, setCurrentUser] = useState(initialUser);
   const [usersList, setUsersList] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -92,6 +120,15 @@ export function AppProvider({ children }) {
     }, 4000);
   }, []);
 
+  // Logout user and clear session state
+  const logoutUser = useCallback((customMessage = null, messageType = 'info') => {
+    clearStoredSession();
+    setSessionExpiresAt(null);
+    setCurrentUser(null);
+    setViewModeState('landing');
+    showToast(customMessage || 'Logged out from staff portal', messageType);
+  }, [showToast]);
+
   // Centralized API fetch helper that attaches JWT and/or user ID
   const apiFetch = useCallback(async (url, options = {}) => {
     const token = localStorage.getItem('auth_token');
@@ -108,6 +145,12 @@ export function AppProvider({ children }) {
         headers
       });
 
+      if (res.status === 401 && !url.includes('/api/auth/login')) {
+        logoutUser('Your session has expired (1 hour limit). Please log in again.', 'warning');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Session expired');
+      }
+
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Request failed');
@@ -117,7 +160,7 @@ export function AppProvider({ children }) {
       console.error('API Error:', err);
       throw err;
     }
-  }, [currentUser]);
+  }, [currentUser, logoutUser]);
 
   // Load authenticated user session, users, branches, and settings
   const loadInitialData = useCallback(async (explicitUserId = null) => {
@@ -132,9 +175,7 @@ export function AppProvider({ children }) {
       // 1. Verify & refresh authenticated user profile
       const authRes = await fetch('/api/auth/me', { headers: authHeaders });
       if (authRes.status === 401) {
-        clearStoredSession();
-        setCurrentUser(null);
-        setViewModeState('landing');
+        logoutUser('Your session has expired. Please log in again.', 'warning');
         return;
       }
 
@@ -198,6 +239,14 @@ export function AppProvider({ children }) {
       if (selected) {
         setCurrentUser(selected);
         localStorage.setItem('auth_user', JSON.stringify(selected));
+
+        const currentExp = localStorage.getItem('auth_expires_at');
+        if (!currentExp || Date.now() >= Number(currentExp)) {
+          const newExp = Date.now() + SESSION_DURATION_MS;
+          localStorage.setItem('auth_expires_at', String(newExp));
+          setSessionExpiresAt(newExp);
+        }
+
         if (selected.role === 'instructor') {
           setActiveTab('instructor');
         } else {
@@ -269,10 +318,53 @@ export function AppProvider({ children }) {
     }
   }, [settings, apiFetch, showToast]);
 
+  // Helper to send Google Review request via WhatsApp when course is about to complete
+  const triggerGoogleReviewRequest = useCallback(async (student) => {
+    const rawPhone = student.phone || student.student_phone || '';
+    const phone = String(rawPhone).replace(/\D/g, '');
+    if (!phone) {
+      showToast('No phone number recorded for this student', 'error');
+      return;
+    }
+    const formattedPhone = phone.startsWith('91') ? phone : `91${phone}`;
+
+    const schoolName = settings.app_name || 'ShivSamarth Motor Driving School';
+    const branchName = student.branch_name || 'Main Branch';
+    const courseName = student.course_name || 'Driving Course';
+    const daysDone = student.days_completed || 0;
+    const totalDays = student.total_course_days || 26;
+    const reviewLink = settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review';
+
+    let message = settings.whatsapp_google_review_template ||
+      `Namaste {student_name}! 🚗✨ Congratulations on nearing the completion of your driving course (Day {days_completed}/{total_days}) at {school_name} ({branch_name})!\n\nWe hope you had a great experience learning to drive safely with our certified instructors. Could you please take 1 minute to share your feedback and give us a 5-star Google Review here?\n\n⭐ Review Link: {google_review_link}\n\nYour review helps our team grow and guides future learners. Thank you & happy safe driving! 🌟`;
+
+    message = message
+      .replaceAll('{student_name}', student.name || student.student_name || 'Student')
+      .replaceAll('{school_name}', schoolName)
+      .replaceAll('{branch_name}', branchName)
+      .replaceAll('{course_name}', courseName)
+      .replaceAll('{days_completed}', String(daysDone))
+      .replaceAll('{total_days}', String(totalDays))
+      .replaceAll('{google_review_link}', reviewLink);
+
+    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+
+    try {
+      await apiFetch(`/api/students/${student.id}/google-review-request`, { method: 'POST' });
+      showToast(`Google Review WhatsApp invite sent to ${student.name || student.student_name}!`);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [settings, apiFetch, showToast]);
+
   const loginUser = useCallback((user, token) => {
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
     if (token) localStorage.setItem('auth_token', token);
     localStorage.setItem('auth_user', JSON.stringify(user));
+    localStorage.setItem('auth_expires_at', String(expiresAt));
 
+    setSessionExpiresAt(expiresAt);
     setCurrentUser(user);
     setViewMode('staff');
 
@@ -284,12 +376,39 @@ export function AppProvider({ children }) {
     showToast(`Welcome back, ${user.name}!`);
   }, [showToast, setViewMode, setActiveTab, handleSetSelectedBranchId, loadInitialData]);
 
-  const logoutUser = useCallback(() => {
-    clearStoredSession();
-    setCurrentUser(null);
-    setViewModeState('landing');
-    showToast('Logged out from staff portal', 'info');
-  }, [showToast]);
+  // Active session 1-hour auto-logout watchdog
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const checkSessionExpiration = () => {
+      const rawExpiresAt = localStorage.getItem('auth_expires_at');
+      if (rawExpiresAt && Date.now() >= Number(rawExpiresAt)) {
+        logoutUser('Your session has expired (1 hour limit). Please log in again.', 'warning');
+      }
+    };
+
+    // Check immediately on user mount
+    checkSessionExpiration();
+
+    // Check every 10 seconds while tab is running
+    const intervalId = setInterval(checkSessionExpiration, 10000);
+
+    // Check immediately when browser tab regains focus or visibility
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSessionExpiration();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkSessionExpiration);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkSessionExpiration);
+    };
+  }, [currentUser, logoutUser]);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -335,7 +454,9 @@ export function AppProvider({ children }) {
         isSearching,
         performSearch,
         triggerWhatsAppReminder,
-        loadInitialData
+        triggerGoogleReviewRequest,
+        loadInitialData,
+        sessionExpiresAt
       }}
     >
       {children}
