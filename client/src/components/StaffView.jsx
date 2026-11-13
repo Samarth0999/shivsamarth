@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  UserCog, Plus, Search, Shield, Edit, Trash2,
+  UserCog, Plus, Search, Shield, Edit,
   KeyRound, X, Building2, Phone, Mail, Save
 } from 'lucide-react';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -59,38 +59,12 @@ export function StaffView() {
     setLoading(true);
     try {
       const res = await apiFetch('/api/auth/users');
-      let serverUsers = res.users || [];
+      const serverUsers = res.users || [];
 
-      // Read locally persisted staff in case server restarted on serverless Vercel
-      let localStaff = [];
+      // Update local storage with current roster
       try {
-        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
-        if (raw) localStaff = JSON.parse(raw);
+        localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(serverUsers));
       } catch (e) {}
-
-      // If server is missing any custom staff that was created locally, merge and re-sync
-      const serverEmails = new Set(serverUsers.map(u => (u.email || '').toLowerCase()));
-      const missingStaff = localStaff.filter(u => u.email && !serverEmails.has(u.email.toLowerCase()));
-
-      if (missingStaff.length > 0) {
-        for (const staffMember of missingStaff) {
-          try {
-            await apiFetch('/api/auth/users', {
-              method: 'POST',
-              body: JSON.stringify(staffMember)
-            });
-          } catch (syncErr) {
-            console.warn('Staff re-sync notice:', syncErr.message);
-          }
-        }
-        try {
-          const refreshed = await apiFetch('/api/auth/users');
-          if (refreshed.users) serverUsers = refreshed.users;
-        } catch (e) {}
-      }
-
-      // Update local storage with full current roster
-      localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(serverUsers));
       setStaff(serverUsers);
     } catch (err) {
       // Fallback to locally stored staff roster if network fails
@@ -262,28 +236,6 @@ export function StaffView() {
       showToast(err.message || 'Failed to save staff account', 'error');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleDeleteStaff = async (user) => {
-    if (!window.confirm(`Are you sure you want to permanently delete staff account for "${user.name}"?`)) return;
-    try {
-      await apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' });
-
-      // Remove from local cache
-      try {
-        const raw = localStorage.getItem(LOCAL_STAFF_KEY);
-        if (raw) {
-          const list = JSON.parse(raw).filter(u => u.id !== user.id && u.email !== user.email);
-          localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(list));
-        }
-      } catch (e) {}
-
-      showToast(`Removed staff account: ${user.name}`);
-      await loadStaff();
-      if (loadInitialData) await loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message || 'Failed to delete user', 'error');
     }
   };
 
@@ -477,30 +429,18 @@ export function StaffView() {
                   </button>
 
                   {isSuperAdmin && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPasswordTargetUser(user);
-                          setIsPasswordModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition-colors cursor-pointer"
-                        title="Reset Password"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span>Password</span>
-                      </button>
-                      {user.id !== currentUser?.id && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteStaff(user)}
-                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                          title="Delete Account"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPasswordTargetUser(user);
+                        setIsPasswordModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition-colors cursor-pointer"
+                      title="Reset Password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Password</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -574,29 +514,17 @@ export function StaffView() {
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         {isSuperAdmin && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPasswordTargetUser(user);
-                                setIsPasswordModalOpen(true);
-                              }}
-                              className="p-2 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors cursor-pointer"
-                              title="Reset Password"
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                            </button>
-                            {user.id !== currentUser?.id && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteStaff(user)}
-                                className="p-2 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition-colors cursor-pointer"
-                                title="Delete Account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPasswordTargetUser(user);
+                              setIsPasswordModalOpen(true);
+                            }}
+                            className="p-2 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors cursor-pointer"
+                            title="Reset Password"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </td>

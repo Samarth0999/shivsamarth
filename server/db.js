@@ -440,109 +440,6 @@ function seedInitialData() {
     JSON.stringify(defaultPermissions)
   );
 
-  // Beed Branch Manager
-  const uBeedMgr = insertUser.run(
-    beed.lastInsertRowid,
-    'Rameshwar Kade (ShriYash Manager)',
-    'rameshwar.shri@shivsamarth.com',
-    '9405799009',
-    'Shri@2026',
-    'branch_manager',
-    3000,
-    'monthly',
-    25000,
-    JSON.stringify({ ...defaultPermissions, delete_payments: false })
-  );
-
-  // ShriYash Branch Manager
-  const uShriYashMgr = insertUser.run(
-    shriyash.lastInsertRowid,
-    'Nitin Shirole (ShriYash Manager)',
-    'shriyash.mgr@shivsamarth.com',
-    '9420635355',
-    'shriyash123',
-    'branch_manager',
-    3000,
-    'monthly',
-    28000,
-    JSON.stringify({ ...defaultPermissions, delete_payments: false })
-  );
-
-  // Instructors
-  const uInstRajesh = insertUser.run(
-    beed.lastInsertRowid,
-    'Rajesh Patil (Lead Instructor)',
-    'rajesh.inst@shivsamarth.com',
-    '9822333333',
-    'inst123',
-    'instructor',
-    0,
-    'monthly',
-    18000,
-    JSON.stringify({
-      student_attendance: true,
-      view_assigned_roster: true,
-      whatsapp_reminders: true,
-      geofence_checkin: true
-    })
-  );
-
-  const uInstAmit = insertUser.run(
-    beed.lastInsertRowid,
-    'Amit Shinde (Instructor)',
-    'amit.inst@shivsamarth.com',
-    '9822444444',
-    'inst123',
-    'instructor',
-    0,
-    'daily',
-    700,
-    JSON.stringify({
-      student_attendance: true,
-      view_assigned_roster: true,
-      whatsapp_reminders: true,
-      geofence_checkin: true
-    })
-  );
-
-  const uInstPriya = insertUser.run(
-    shriyash.lastInsertRowid,
-    'Priya Joshi (Instructor)',
-    'priya.inst@shivsamarth.com',
-    '9822555555',
-    'inst123',
-    'instructor',
-    0,
-    'monthly',
-    19000,
-    JSON.stringify({
-      student_attendance: true,
-      view_assigned_roster: true,
-      whatsapp_reminders: true,
-      geofence_checkin: true
-    })
-  );
-
-  // Office Staff
-  const uStaffBeed = insertUser.run(
-    beed.lastInsertRowid,
-    'Pooja More (Counselor)',
-    'pooja.beed@shivsamarth.com',
-    '9822666666',
-    'staff123',
-    'office_staff',
-    1000,
-    'monthly',
-    15000,
-    JSON.stringify({
-      view_leads: true,
-      manage_leads: true,
-      manage_students: true,
-      collect_fees: true,
-      send_whatsapp_alerts: true
-    })
-  );
-
   // 7. Vehicles (Beed Main Branch & ShriYash Branch)
   const insertVeh = db.prepare(`
     INSERT INTO vehicles (branch_id, reg_number, model, fuel_type, status, insurance_expiry, puc_expiry, fitness_expiry)
@@ -567,18 +464,31 @@ function seedInitialData() {
   ];
 
   slots.forEach((slot, idx) => {
-    const defaultInst = idx % 2 === 0 ? uInstRajesh.lastInsertRowid : uInstAmit.lastInsertRowid;
-    insertBatch.run(beed.lastInsertRowid, `Batch ${idx + 1} (${slot.split(' ')[0]})`, slot, 4, defaultInst);
+    insertBatch.run(beed.lastInsertRowid, `Batch ${idx + 1} (${slot.split(' ')[0]})`, slot, 4, null);
   });
 
   slots.forEach((slot, idx) => {
-    insertBatch.run(shriyash.lastInsertRowid, `ShriYash Batch ${idx + 1} (${slot.split(' ')[0]})`, slot, 4, uInstPriya.lastInsertRowid);
+    insertBatch.run(shriyash.lastInsertRowid, `ShriYash Batch ${idx + 1} (${slot.split(' ')[0]})`, slot, 4, null);
   });
 
   console.log('✅ Production database tables and branch master configuration initialized cleanly!');
 }
 
 initializeDatabase();
+
+// Enforce single Super Admin only: delete all non-super-admin staff accounts
+try {
+  const superAdmin = db.prepare("SELECT id FROM users WHERE role = 'super_admin' LIMIT 1").get();
+  if (superAdmin) {
+    db.prepare("UPDATE batches SET instructor_id = NULL WHERE instructor_id IS NOT NULL AND instructor_id != ?").run(superAdmin.id);
+    db.prepare("UPDATE students SET primary_instructor_id = NULL WHERE primary_instructor_id IS NOT NULL AND primary_instructor_id != ?").run(superAdmin.id);
+    try {
+      db.prepare("UPDATE leads SET assigned_to_user_id = NULL WHERE assigned_to_user_id IS NOT NULL AND assigned_to_user_id != ?").run(superAdmin.id);
+    } catch (e) {}
+    db.prepare("DELETE FROM user_permissions WHERE user_id != ?").run(superAdmin.id);
+    db.prepare("DELETE FROM users WHERE role != 'super_admin'").run();
+  }
+} catch (e) { }
 
 // Ensure instructor_id column exists on batches in existing database
 try {

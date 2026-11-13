@@ -30,27 +30,13 @@ router.post('/login', (req, res) => {
     WHERE (LOWER(u.email) = ? OR u.phone = ?) AND u.is_active = 1
   `).get(identifier, identifier);
 
-  // Shortcut aliases for demo personas
-  if (!user && (identifier === 'admin' || identifier === 'super_admin')) {
+  // Shortcut aliases for Super Admin
+  if (!user && (identifier === 'admin' || identifier === 'super_admin' || identifier === 'owner')) {
     user = db.prepare(`
       SELECT u.*, b.name as branch_name, b.code as branch_code
       FROM users u
       LEFT JOIN branches b ON u.branch_id = b.id
       WHERE u.role = 'super_admin' AND u.is_active = 1 LIMIT 1
-    `).get();
-  } else if (!user && (identifier === 'manager_beed' || identifier === 'manager')) {
-    user = db.prepare(`
-      SELECT u.*, b.name as branch_name, b.code as branch_code
-      FROM users u
-      LEFT JOIN branches b ON u.branch_id = b.id
-      WHERE u.role = 'branch_manager' AND u.is_active = 1 LIMIT 1
-    `).get();
-  } else if (!user && (identifier === 'inst_rajesh' || identifier === 'instructor' || identifier === 'rajesh')) {
-    user = db.prepare(`
-      SELECT u.*, b.name as branch_name, b.code as branch_code
-      FROM users u
-      LEFT JOIN branches b ON u.branch_id = b.id
-      WHERE u.role = 'instructor' AND u.is_active = 1 LIMIT 1
     `).get();
   }
 
