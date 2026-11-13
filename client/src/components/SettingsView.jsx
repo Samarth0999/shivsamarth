@@ -4,7 +4,7 @@ import {
   Settings, Sliders, Shield, Award, DollarSign,
   Receipt, Save, Plus, CheckCircle, AlertTriangle, Users,
   ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation,
-  Building2, ArrowRight
+  Building2, ArrowRight, ExternalLink, Star
 } from 'lucide-react';
 
 export function SettingsView() {
@@ -68,7 +68,8 @@ export function SettingsView() {
     address: '',
     phone: '',
     latitude: '18.9904',
-    longitude: '75.7607'
+    longitude: '75.7607',
+    google_review_url: ''
   });
 
   // Create Branch (Super Admin)
@@ -85,7 +86,8 @@ export function SettingsView() {
           ...newBranch,
           code: newBranch.code.trim().toUpperCase(),
           latitude: parseFloat(newBranch.latitude) || 0,
-          longitude: parseFloat(newBranch.longitude) || 0
+          longitude: parseFloat(newBranch.longitude) || 0,
+          google_review_url: newBranch.google_review_url ? newBranch.google_review_url.trim() : null
         })
       });
       showToast(`Branch "${newBranch.name}" created successfully!`);
@@ -96,7 +98,8 @@ export function SettingsView() {
         address: '',
         phone: '',
         latitude: '18.9904',
-        longitude: '75.7607'
+        longitude: '75.7607',
+        google_review_url: ''
       });
       loadInitialData(currentUser?.id);
     } catch (err) {
@@ -117,7 +120,8 @@ export function SettingsView() {
           address: editingBranch.address,
           phone: editingBranch.phone,
           latitude: parseFloat(editingBranch.latitude) || 0,
-          longitude: parseFloat(editingBranch.longitude) || 0
+          longitude: parseFloat(editingBranch.longitude) || 0,
+          google_review_url: editingBranch.google_review_url !== undefined ? editingBranch.google_review_url.trim() : null
         })
       });
       showToast(`Branch "${editingBranch.name}" updated successfully!`);
@@ -536,6 +540,37 @@ export function SettingsView() {
                       {Number(b.latitude)?.toFixed(4)}, {Number(b.longitude)?.toFixed(4)}
                     </span>
                   </div>
+
+                  {/* Branch Google Review Link */}
+                  <div className="mt-2.5 p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/70 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-900 mb-1">
+                      <span className="flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        <span>Google Reviews:</span>
+                      </span>
+                      {b.google_review_url ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">Branch Link</span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">Global Fallback</span>
+                      )}
+                    </div>
+                    {b.google_review_url ? (
+                      <a
+                        href={b.google_review_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-mono truncate"
+                        title={b.google_review_url}
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{b.google_review_url}</span>
+                      </a>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 italic">
+                        Using global review link configured in Thresholds & WhatsApp tab.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between">
@@ -667,11 +702,11 @@ export function SettingsView() {
               />
             </div>
 
-            {/* Google Review URL */}
+            {/* Google Review URL Fallback */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-              <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                <span>Google Business Profile Review Link</span>
-                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">Google Maps</span>
+              <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                <span>Global Fallback Google Review Link</span>
+                <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">Fallback</span>
               </label>
               <input
                 type="url"
@@ -680,7 +715,7 @@ export function SettingsView() {
                 onChange={e => setFormSettings({ ...formSettings, google_review_url: e.target.value })}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-xs text-slate-800"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Short link from Google Business Profile (Ask for reviews)</p>
+              <p className="text-[10px] text-slate-500 mt-1">Default review URL used if a student's branch has no specific link configured.</p>
             </div>
 
             {/* Google Review Trigger Threshold */}
@@ -697,6 +732,72 @@ export function SettingsView() {
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono text-sm"
               />
               <p className="text-[10px] text-slate-500 mt-1">Triggers review prompt when remaining course days &le; this number (e.g. 3 days before finish)</p>
+            </div>
+
+            {/* Branch-Wise Google Review URLs Card */}
+            <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-200 sm:col-span-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                    <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                    <span>Branch-Wise Google Business Profile Review Links</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Review invitations sent to students automatically direct to the Google Review URL of the branch they are enrolled in.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('branches')}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  Manage Branch Links
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {branches.map(b => (
+                  <div key={b.id} className="p-3 bg-white rounded-xl border border-amber-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-slate-900 text-xs flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                        {b.name} ({b.code})
+                      </span>
+                      {b.google_review_url ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">Branch URL Configured</span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">Using Global Fallback</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-600 truncate">
+                      {b.google_review_url || formSettings.google_review_url || 'No URL configured'}
+                    </p>
+                    <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingBranch(b);
+                        }}
+                        className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        <Edit className="w-3 h-3" />
+                        Edit Review URL
+                      </button>
+                      {(b.google_review_url || formSettings.google_review_url) && (
+                        <a
+                          href={b.google_review_url || formSettings.google_review_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-semibold text-amber-700 hover:underline flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Test Review Link
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* WhatsApp Google Review Template */}
@@ -1198,6 +1299,26 @@ export function SettingsView() {
                 />
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                    <span>Google Business Profile Review Link</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="e.g. https://g.page/r/shivsamarth-branch/review"
+                  value={newBranch.google_review_url || ''}
+                  onChange={e => setNewBranch({ ...newBranch, google_review_url: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Direct review link for this branch location. Leave blank to inherit system global review URL.
+                </p>
+              </div>
+
               {/* Geofence GPS Coordinates */}
               <div className="p-3 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-2">
                 <div className="flex items-center justify-between">
@@ -1317,6 +1438,26 @@ export function SettingsView() {
                   onChange={e => setEditingBranch({ ...editingBranch, phone: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl"
                 />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                    <span>Google Business Profile Review Link</span>
+                  </span>
+                  <span className="text-[10px] text-amber-700 font-semibold">Branch-specific</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="e.g. https://g.page/r/shivsamarth-branch/review"
+                  value={editingBranch.google_review_url || ''}
+                  onChange={e => setEditingBranch({ ...editingBranch, google_review_url: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  WhatsApp completion invites sent to students in this branch will use this direct Google Review link.
+                </p>
               </div>
 
               {/* Geofence GPS Coordinates */}

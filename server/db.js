@@ -24,6 +24,7 @@ function initializeDatabase() {
       phone TEXT,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
+      google_review_url TEXT,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
 
@@ -373,11 +374,11 @@ function seedInitialData() {
 
   // 1. Branches (ShivSamarth Main Branch & ShriYash Branch in Beed)
   const insertBranch = db.prepare(`
-    INSERT INTO branches (code, name, address, phone, latitude, longitude)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO branches (code, name, address, phone, latitude, longitude, google_review_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  const beed = insertBranch.run('SSMB', 'ShivSamarth Main Branch', 'Satyabhama Complex, Infront of Rashtrwadi Bhawan, Swaraj Nagar, Beed, Maharashtra 431122', '8507075555', 18.9894, 75.7601);
-  const shriyash = insertBranch.run('SYBR', 'ShriYash Branch', 'Infront of Lokmat office, Sahayog Nagar, Beed, Maharashtra 431122', '9420635355', 18.9930, 75.7580);
+  const beed = insertBranch.run('SSMB', 'ShivSamarth Main Branch', 'Satyabhama Complex, Infront of Rashtrwadi Bhawan, Swaraj Nagar, Beed, Maharashtra 431122', '8507075555', 18.9894, 75.7601, 'https://g.page/r/shivsamarth-main-beed/review');
+  const shriyash = insertBranch.run('SYBR', 'ShriYash Branch', 'Infront of Lokmat office, Sahayog Nagar, Beed, Maharashtra 431122', '9420635355', 18.9930, 75.7580, 'https://g.page/r/shriyash-driving-beed/review');
 
   // 2. Settings
   const insertSetting = db.prepare('INSERT INTO settings (key, value, description) VALUES (?, ?, ?)');
@@ -489,6 +490,17 @@ try {
 // Ensure last_review_request_at column exists on students in existing database
 try {
   db.prepare('ALTER TABLE students ADD COLUMN last_review_request_at TEXT').run();
+} catch (e) { }
+
+// Ensure google_review_url column exists on branches in existing database
+try {
+  db.prepare('ALTER TABLE branches ADD COLUMN google_review_url TEXT').run();
+} catch (e) { }
+
+// Populate default branch Google review URLs if empty
+try {
+  db.prepare("UPDATE branches SET google_review_url = 'https://g.page/r/shivsamarth-main-beed/review' WHERE (code IN ('SSMB', 'SHIV') OR name LIKE '%ShivSamarth%') AND (google_review_url IS NULL OR google_review_url = '')").run();
+  db.prepare("UPDATE branches SET google_review_url = 'https://g.page/r/shriyash-driving-beed/review' WHERE (code IN ('SYBR', 'SHRI') OR name LIKE '%ShriYash%') AND (google_review_url IS NULL OR google_review_url = '')").run();
 } catch (e) { }
 
 // Ensure Google review default settings exist in existing database

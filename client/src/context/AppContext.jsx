@@ -329,11 +329,12 @@ export function AppProvider({ children }) {
     const formattedPhone = phone.startsWith('91') ? phone : `91${phone}`;
 
     const schoolName = settings.app_name || 'ShivSamarth Motor Driving School';
-    const branchName = student.branch_name || 'Main Branch';
+    const branchObj = branches.find(b => b.id === (student.branch_id || Number(student.branch_id)));
+    const branchName = student.branch_name || branchObj?.name || 'Main Branch';
     const courseName = student.course_name || 'Driving Course';
     const daysDone = student.days_completed || 0;
     const totalDays = student.total_course_days || 26;
-    const reviewLink = settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review';
+    const reviewLink = student.branch_google_review_url || branchObj?.google_review_url || settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review';
 
     let message = settings.whatsapp_google_review_template ||
       `Namaste {student_name}! 🚗✨ Congratulations on nearing the completion of your driving course (Day {days_completed}/{total_days}) at {school_name} ({branch_name})!\n\nWe hope you had a great experience learning to drive safely with our certified instructors. Could you please take 1 minute to share your feedback and give us a 5-star Google Review here?\n\n⭐ Review Link: {google_review_link}\n\nYour review helps our team grow and guides future learners. Thank you & happy safe driving! 🌟`;
@@ -356,7 +357,7 @@ export function AppProvider({ children }) {
     } catch (e) {
       console.error(e);
     }
-  }, [settings, apiFetch, showToast]);
+  }, [settings, branches, apiFetch, showToast]);
 
   const loginUser = useCallback((user, token) => {
     const expiresAt = Date.now() + SESSION_DURATION_MS;

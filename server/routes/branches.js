@@ -83,7 +83,7 @@ router.get('/stats', (req, res) => {
 
 // Create new branch (Super Admin only)
 router.post('/', requireRole(['super_admin']), (req, res) => {
-  const { code, name, address, phone, latitude, longitude } = req.body;
+  const { code, name, address, phone, latitude, longitude, google_review_url } = req.body;
 
   if (!code || !name || latitude === undefined || longitude === undefined) {
     return res.status(400).json({ error: 'Code, Name, Latitude and Longitude are required.' });
@@ -91,11 +91,19 @@ router.post('/', requireRole(['super_admin']), (req, res) => {
 
   try {
     const insert = db.prepare(`
-      INSERT INTO branches (code, name, address, phone, latitude, longitude)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO branches (code, name, address, phone, latitude, longitude, google_review_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const result = insert.run(code.toUpperCase(), name, address || null, phone || null, latitude, longitude);
+    const result = insert.run(
+      code.toUpperCase(),
+      name,
+      address || null,
+      phone || null,
+      latitude,
+      longitude,
+      google_review_url ? google_review_url.trim() : null
+    );
     const newBranch = db.prepare('SELECT * FROM branches WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ branch: newBranch });
   } catch (err) {
@@ -106,21 +114,35 @@ router.post('/', requireRole(['super_admin']), (req, res) => {
 // Update branch coordinates and details (Super Admin)
 router.put('/:id', requireRole(['super_admin']), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { code, name, address, phone, latitude, longitude } = req.body;
+  const { code, name, address, phone, latitude, longitude, google_review_url } = req.body;
 
   try {
+    const existing = db.prepare('SELECT * FROM branches WHERE id = ?').get(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+
+    const newCode = code !== undefined ? code.trim().toUpperCase() : existing.code;
+    const newName = name !== undefined ? name.trim() : existing.name;
+    const newAddress = address !== undefined ? address : existing.address;
+    const newPhone = phone !== undefined ? phone : existing.phone;
+    const newLat = latitude !== undefined ? latitude : existing.latitude;
+    const newLng = longitude !== undefined ? longitude : existing.longitude;
+    const newReviewUrl = google_review_url !== undefined ? (google_review_url ? google_review_url.trim() : null) : existing.google_review_url;
+
     const update = db.prepare(`
       UPDATE branches
-      SET code = COALESCE(?, code),
-          name = COALESCE(?, name),
-          address = COALESCE(?, address),
-          phone = COALESCE(?, phone),
-          latitude = COALESCE(?, latitude),
-          longitude = COALESCE(?, longitude)
+      SET code = ?,
+          name = ?,
+          address = ?,
+          phone = ?,
+          latitude = ?,
+          longitude = ?,
+          google_review_url = ?
       WHERE id = ?
     `);
 
-    update.run(code ? code.trim().toUpperCase() : null, name ? name.trim() : null, address !== undefined ? address : null, phone !== undefined ? phone : null, latitude !== undefined ? latitude : null, longitude !== undefined ? longitude : null, id);
+    update.run(newCode, newName, newAddress, newPhone, newLat, newLng, newReviewUrl, id);
     const updated = db.prepare('SELECT * FROM branches WHERE id = ?').get(id);
     res.json({ branch: updated });
   } catch (err) {

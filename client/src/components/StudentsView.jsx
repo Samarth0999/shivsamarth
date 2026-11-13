@@ -1570,8 +1570,8 @@ export function StudentsView({ isAdmissionModalOpen, setIsAdmissionModalOpen }) 
                     </h5>
                     <p className="text-[11px] text-slate-600 mt-0.5">
                       {studentDetails.student.last_review_request_at 
-                        ? `Last review invite dispatched on ${new Date(studentDetails.student.last_review_request_at).toLocaleString()}`
-                        : `Invite student on WhatsApp to rate ShivSamarth on Google Maps.`}
+                        ? `Last review invite dispatched on ${new Date(studentDetails.student.last_review_request_at).toLocaleString()} • Directs to ${studentDetails.student.branch_name} Google Review link`
+                        : `Invite student on WhatsApp to rate ${studentDetails.student.branch_name || 'branch'} on Google Maps.`}
                     </p>
                   </div>
                 </div>
