@@ -27,7 +27,6 @@ function MainApp() {
     currentUser,
     activeTab,
     setActiveTab,
-    toast,
     setViewMode,
     isNavOpen
   } = useApp();
@@ -54,20 +53,6 @@ function MainApp() {
 
   return (
     <div className="h-dvh flex overflow-hidden bg-[#f8f9fc] text-slate-800">
-
-      {/* Toast Notification Banner */}
-      {toast && (
-        <div className="fixed bottom-20 md:bottom-5 left-4 right-4 sm:left-auto sm:right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border border-slate-800 bg-slate-900 text-white text-xs font-semibold animate-slide-up">
-          {toast.type === 'error' ? (
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-          ) : toast.type === 'info' ? (
-            <Info className="w-4 h-4 text-purple-400 shrink-0" />
-          ) : (
-            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          )}
-          <span>{toast.message}</span>
-        </div>
-      )}
 
       {/* Full-Height Left Sidebar */}
       <Sidebar />
@@ -129,10 +114,24 @@ function MainApp() {
 }
 
 function AppRouter() {
-  const { viewMode } = useApp();
+  const { viewMode, toast } = useApp();
 
   return (
     <>
+      {/* Toast Notification Banner (Globally visible on both Landing and Staff Portal) */}
+      {toast && (
+        <div className="fixed bottom-20 md:bottom-5 left-4 right-4 sm:left-auto sm:right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border border-slate-800 bg-slate-900 text-white text-xs font-semibold animate-slide-up">
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+          ) : toast.type === 'info' ? (
+            <Info className="w-4 h-4 text-purple-400 shrink-0" />
+          ) : (
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       {viewMode === 'staff' ? <MainApp /> : <LandingPage />}
     </>
   );

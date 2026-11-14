@@ -4,15 +4,17 @@ const { db } = require('../db');
 const JWT_SECRET = process.env.JWT_SECRET || 'shivsamarth_jwt_secret_key_2026_super_secure';
 
 function authMiddleware(req, res, next) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   let userId = null;
+  let decodedUser = null;
 
   // 1. Check for Bearer JWT token in Authorization header
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      userId = decoded.id;
+      decodedUser = jwt.verify(token, JWT_SECRET, { clockTolerance: 300 });
+      userId = decodedUser.id;
     } catch (err) {
       return res.status(401).json({ error: 'Invalid or expired JWT authentication token' });
     }
@@ -23,12 +25,22 @@ function authMiddleware(req, res, next) {
     userId = req.headers['x-user-id'] || req.query.userId || 1;
   }
 
-  const user = db.prepare(`
+  let user = db.prepare(`
     SELECT u.*, b.name as branch_name, b.code as branch_code, b.latitude as branch_lat, b.longitude as branch_lon
     FROM users u
     LEFT JOIN branches b ON u.branch_id = b.id
     WHERE u.id = ? AND u.is_active = 1
   `).get(userId);
+
+  // Fallback: If user ID changed or container reseeded, match by verified email or phone from JWT
+  if (!user && decodedUser && (decodedUser.email || decodedUser.phone)) {
+    user = db.prepare(`
+      SELECT u.*, b.name as branch_name, b.code as branch_code, b.latitude as branch_lat, b.longitude as branch_lon
+      FROM users u
+      LEFT JOIN branches b ON u.branch_id = b.id
+      WHERE (LOWER(u.email) = ? OR u.phone = ?) AND u.is_active = 1
+    `).get((decodedUser.email || '').toLowerCase(), decodedUser.phone || '');
+  }
 
   if (!user) {
     return res.status(401).json({ error: 'User not authenticated or inactive' });

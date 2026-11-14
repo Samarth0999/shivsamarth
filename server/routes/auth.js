@@ -15,6 +15,7 @@ const { requireRole, authMiddleware, JWT_SECRET } = require('../middleware/auth'
 
 // Public JWT Login Endpoint for Secret Staff Portal (Ctrl+Shift+S)
 router.post('/login', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   const identifier = (req.body.email || req.body.username || req.body.phone || '').trim().toLowerCase();
   const password = req.body.password;
 

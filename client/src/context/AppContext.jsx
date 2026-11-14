@@ -31,7 +31,16 @@ function checkAndGetValidSession() {
 
     const rawExpiresAt = localStorage.getItem('auth_expires_at');
     if (rawExpiresAt) {
-      const expiresAt = Number(rawExpiresAt);
+      let expiresAt = Number(rawExpiresAt);
+      if (isNaN(expiresAt) || expiresAt <= 0) {
+        expiresAt = Date.now() + SESSION_DURATION_MS;
+        localStorage.setItem('auth_expires_at', String(expiresAt));
+      } else if (expiresAt < 100000000000) {
+        // If stored as seconds (10 digits) or delta, convert to absolute ms timestamp
+        expiresAt = expiresAt < 10000000 ? Date.now() + expiresAt * 1000 : expiresAt * 1000;
+        localStorage.setItem('auth_expires_at', String(expiresAt));
+      }
+
       if (Date.now() >= expiresAt) {
         clearStoredSession();
         return { token: null, user: null, expiresAt: null };
@@ -142,6 +151,7 @@ export function AppProvider({ children }) {
     const token = localStorage.getItem('auth_token');
     const headers = {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...(currentUser ? { 'x-user-id': String(currentUser.id) } : {}),
       ...(options.headers || {})
@@ -154,9 +164,21 @@ export function AppProvider({ children }) {
       });
 
       if (res.status === 401 && !url.includes('/api/auth/login')) {
-        logoutUser('Your session has expired (1 hour limit). Please log in again.', 'warning');
+        console.warn(`[apiFetch 401 on ${url}]`);
+        const rawExpiresAt = localStorage.getItem('auth_expires_at');
+        let isExpired = false;
+        if (rawExpiresAt) {
+          let exp = Number(rawExpiresAt);
+          if (exp < 100000000000) exp = exp < 10000000 ? Date.now() + exp * 1000 : exp * 1000;
+          if (Date.now() >= exp) isExpired = true;
+        }
+
+        // Only kick user to landing if session is genuinely expired or auth profile check fails
+        if (isExpired || url.includes('/api/auth/me')) {
+          logoutUser('Your session has expired. Please log in again.', 'warning');
+        }
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Session expired');
+        throw new Error(data.error || 'Unauthorized');
       }
 
       const data = await res.json();
@@ -171,68 +193,83 @@ export function AppProvider({ children }) {
   }, [currentUser, logoutUser]);
 
   // Load authenticated user session, users, branches, and settings
-  const loadInitialData = useCallback(async (explicitUserId = null) => {
+  const loadInitialData = useCallback(async (explicitUserId = null, options = {}) => {
     const token = localStorage.getItem('auth_token');
     if (!token && !explicitUserId) return;
 
-    const authHeaders = token
-      ? { 'Authorization': `Bearer ${token}` }
-      : { 'x-user-id': String(explicitUserId) };
+    const authHeaders = {
+      'Cache-Control': 'no-cache',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(explicitUserId ? { 'x-user-id': String(explicitUserId) } : {})
+    };
 
     try {
-      // 1. Verify & refresh authenticated user profile
-      const authRes = await fetch('/api/auth/me', { headers: authHeaders });
-      if (authRes.status === 401) {
-        logoutUser('Your session has expired. Please log in again.', 'warning');
-        return;
-      }
+      // 1. Verify & refresh authenticated user profile (skip if caller already hydrated fresh user)
+      if (!options.skipUserFetch) {
+        const authRes = await fetch('/api/auth/me', { headers: authHeaders });
+        if (authRes.status === 401) {
+          const rawExp = localStorage.getItem('auth_expires_at');
+          let exp = rawExp ? Number(rawExp) : 0;
+          if (exp < 100000000000) exp = exp < 10000000 ? Date.now() + exp * 1000 : exp * 1000;
+          if (exp && Date.now() >= exp) {
+            logoutUser('Your session has expired. Please log in again.', 'warning');
+            return;
+          }
+        } else if (authRes.ok) {
+          const authData = await authRes.json();
+          if (authData.user) {
+            const hydratedUser = {
+              ...authData.user,
+              permissions: authData.permissions || authData.user.permissions || {}
+            };
+            setCurrentUser(hydratedUser);
+            localStorage.setItem('auth_user', JSON.stringify(hydratedUser));
 
-      const authData = await authRes.json();
-      if (authData.user) {
-        const hydratedUser = {
-          ...authData.user,
-          permissions: authData.permissions || authData.user.permissions || {}
-        };
-        setCurrentUser(hydratedUser);
-        localStorage.setItem('auth_user', JSON.stringify(hydratedUser));
+            if (hydratedUser.role !== 'super_admin') {
+              setSelectedBranchId(hydratedUser.branch_id ?? null);
+            }
 
-        if (hydratedUser.role !== 'super_admin') {
-          setSelectedBranchId(hydratedUser.branch_id ?? null);
-        }
-
-        // Only set a default tab if none is saved yet or instructor logged in on a non-instructor tab
-        const savedTab = localStorage.getItem('active_tab');
-        if (!savedTab) {
-          const defaultTab = hydratedUser.role === 'instructor' ? 'instructor' : 'dashboard';
-          setActiveTabState(defaultTab);
-          localStorage.setItem('active_tab', defaultTab);
-        } else if (hydratedUser.role === 'instructor' && !savedTab.startsWith('instructor')) {
-          setActiveTabState('instructor');
-          localStorage.setItem('active_tab', 'instructor');
+            // Only set a default tab if none is saved yet or instructor logged in on a non-instructor tab
+            const savedTab = localStorage.getItem('active_tab');
+            if (!savedTab) {
+              const defaultTab = hydratedUser.role === 'instructor' ? 'instructor' : 'dashboard';
+              setActiveTabState(defaultTab);
+              localStorage.setItem('active_tab', defaultTab);
+            } else if (hydratedUser.role === 'instructor' && !savedTab.startsWith('instructor')) {
+              setActiveTabState('instructor');
+              localStorage.setItem('active_tab', 'instructor');
+            }
+          }
         }
       }
 
       // 2. Get users list
       const usersRes = await fetch('/api/auth/users', { headers: authHeaders });
-      const usersData = await usersRes.json();
-      if (usersData.users) setUsersList(usersData.users);
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        if (usersData.users) setUsersList(usersData.users);
+      }
 
       // 3. Get branches
       const branchesRes = await fetch('/api/branches', { headers: authHeaders });
-      const branchesData = await branchesRes.json();
-      if (branchesData.branches) setBranches(branchesData.branches);
+      if (branchesRes.ok) {
+        const branchesData = await branchesRes.json();
+        if (branchesData.branches) setBranches(branchesData.branches);
+      }
 
       // 4. Get system settings
       const settingsRes = await fetch('/api/settings', { headers: authHeaders });
-      const settingsData = await settingsRes.json();
-      if (settingsData.settings) setSettings(settingsData.settings);
-      if (settingsData.courseTypes) setCourseTypes(settingsData.courseTypes);
-      if (settingsData.paymentModes) setPaymentModes(settingsData.paymentModes);
-      if (settingsData.expenseCategories) setExpenseCategories(settingsData.expenseCategories);
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.settings) setSettings(settingsData.settings);
+        if (settingsData.courseTypes) setCourseTypes(settingsData.courseTypes);
+        if (settingsData.paymentModes) setPaymentModes(settingsData.paymentModes);
+        if (settingsData.expenseCategories) setExpenseCategories(settingsData.expenseCategories);
+      }
     } catch (err) {
       console.error('Initialization error:', err);
     }
-  }, []);
+  }, [logoutUser]);
 
   useEffect(() => {
     if (localStorage.getItem('auth_token')) {
@@ -372,18 +409,20 @@ export function AppProvider({ children }) {
     if (token) localStorage.setItem('auth_token', token);
     localStorage.setItem('auth_user', JSON.stringify(user));
     localStorage.setItem('auth_expires_at', String(expiresAt));
+    localStorage.setItem('view_mode', 'staff');
 
     setSessionExpiresAt(expiresAt);
     setCurrentUser(user);
-    setViewMode('staff');
+    setViewModeState('staff');
 
     const defaultTab = user.role === 'instructor' ? 'instructor' : 'dashboard';
     setActiveTab(defaultTab);
     handleSetSelectedBranchId(user.role !== 'super_admin' ? user.branch_id : null);
 
-    loadInitialData();
+    // Initial load: skip redundant /api/auth/me because user is already verified from login
+    loadInitialData(user.id, { skipUserFetch: true });
     showToast(`Welcome back, ${user.name}!`);
-  }, [showToast, setViewMode, setActiveTab, handleSetSelectedBranchId, loadInitialData]);
+  }, [showToast, setActiveTab, handleSetSelectedBranchId, loadInitialData]);
 
   // Active session 1-hour auto-logout watchdog
   useEffect(() => {
@@ -391,12 +430,22 @@ export function AppProvider({ children }) {
 
     const checkSessionExpiration = () => {
       const rawExpiresAt = localStorage.getItem('auth_expires_at');
-      if (rawExpiresAt && Date.now() >= Number(rawExpiresAt)) {
+      if (!rawExpiresAt) return;
+
+      let exp = Number(rawExpiresAt);
+      if (isNaN(exp) || exp <= 0) return;
+      if (exp < 100000000000) {
+        exp = exp < 10000000 ? Date.now() + exp * 1000 : exp * 1000;
+        localStorage.setItem('auth_expires_at', String(exp));
+      }
+
+      if (Date.now() >= exp) {
+        console.warn('[Session expired by watchdog]', { now: Date.now(), exp });
         logoutUser('Your session has expired (1 hour limit). Please log in again.', 'warning');
       }
     };
 
-    // Check immediately on user mount
+    // Check on mount
     checkSessionExpiration();
 
     // Check every 10 seconds while tab is running
