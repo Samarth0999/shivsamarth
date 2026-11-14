@@ -24,7 +24,7 @@ export function SettingsView() {
     isFirebaseConfigured
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState('branches'); // 'branches' | 'thresholds' | 'courses' | 'categories'
+  const [activeTab, setActiveTab] = useState('branches'); // 'branches' | 'thresholds' | 'categories'
   const [isSyncingFirebase, setIsSyncingFirebase] = useState(false);
 
   // Clear All Data Danger Zone state
@@ -86,17 +86,6 @@ export function SettingsView() {
     google_review_url: settings.google_review_url || 'https://g.page/r/shivsamarth-driving-school/review',
     google_review_trigger_days: settings.google_review_trigger_days || '3',
     whatsapp_google_review_template: settings.whatsapp_google_review_template || ''
-  });
-
-  // Course Types form
-  const [isAddCourseOpen, setIsAddCourseOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState(null); // when editing a course package
-  const [newCourse, setNewCourse] = useState({
-    name: '',
-    duration_days: 26,
-    base_fee: 8500,
-    is_license_course: 1,
-    description: ''
   });
 
   // Payment Modes state & inline editing
@@ -245,65 +234,7 @@ export function SettingsView() {
   };
 
   // ==========================================
-  // 1. COURSE PACKAGES ACTIONS (Add, Edit, Delete)
-  // ==========================================
-
-  // Add Course Type
-  const handleCreateCourse = async (e) => {
-    e.preventDefault();
-    try {
-      await apiFetch('/api/settings/course-types', {
-        method: 'POST',
-        body: JSON.stringify(newCourse)
-      });
-      showToast(`Course type "${newCourse.name}" added!`);
-      setIsAddCourseOpen(false);
-      setNewCourse({
-        name: '',
-        duration_days: 26,
-        base_fee: 8500,
-        is_license_course: 1,
-        description: ''
-      });
-      loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  // Update Existing Course Type
-  const handleUpdateCourse = async (e) => {
-    e.preventDefault();
-    if (!editingCourse) return;
-    try {
-      await apiFetch(`/api/settings/course-types/${editingCourse.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(editingCourse)
-      });
-      showToast(`Course package "${editingCourse.name}" updated successfully!`);
-      setEditingCourse(null);
-      loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  // Delete Course Type
-  const handleDeleteCourse = async (course) => {
-    if (!window.confirm(`Are you sure you want to delete course package "${course.name}"?`)) return;
-    try {
-      const res = await apiFetch(`/api/settings/course-types/${course.id}`, {
-        method: 'DELETE'
-      });
-      showToast(res.message, res.deactivated ? 'info' : 'success');
-      loadInitialData(currentUser?.id);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  // ==========================================
-  // 2. PAYMENT MODES ACTIONS (Add, Edit, Delete)
+  // 1. PAYMENT MODES ACTIONS (Add, Edit, Delete)
   // ==========================================
 
   // Add Payment Mode
@@ -431,10 +362,16 @@ export function SettingsView() {
                 <span>Firebase Cloud Infrastructure</span>
               </h4>
               {isFirebaseConfigured ? (
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Connected &amp; Active
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Connected &amp; Active
+                  </span>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-200">
+                    <Cloud className="w-3 h-3 text-blue-600" />
+                    Auto-Sync Active (Realtime Cloud Sync)
+                  </span>
+                </div>
               ) : (
                 <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200">
                   Ready for Credentials
@@ -442,7 +379,7 @@ export function SettingsView() {
               )}
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
-              Project ID: <span className="font-mono font-semibold text-slate-800">shivsamarth-51326</span> • Cloud Firestore (Database) • Firebase Authentication • Cloud Storage
+              Project ID: <span className="font-mono font-semibold text-slate-800">shivsamarth-51326</span> • Cloud Firestore (Auto-Sync On) • Firebase Authentication • Cloud Storage
             </p>
           </div>
         </div>
@@ -483,8 +420,8 @@ export function SettingsView() {
         </div>
       </div>
 
-      {/* Top 4 Administration Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top 3 Administration Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1: Branch Management */}
         <div
           onClick={() => setActiveTab('branches')}
@@ -537,33 +474,7 @@ export function SettingsView() {
           </div>
         </div>
 
-        {/* Card 3: Course Packages & Pricing */}
-        <div
-          onClick={() => setActiveTab('courses')}
-          className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'courses' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
-            }`}
-        >
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Award className="w-5 h-5" />
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">
-                {courseTypes.length} Packages
-              </span>
-            </div>
-            <h3 className="text-sm font-bold text-slate-900">Course Packages &amp; Pricing</h3>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              Define training curricula, syllabus durations, base fee pricing, and license options.
-            </p>
-          </div>
-          <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600">
-            <span>Configure</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </div>
-
-        {/* Card 4: Payment & Expense Modes */}
+        {/* Card 3: Payment & Expense Modes */}
         <div
           onClick={() => setActiveTab('categories')}
           className={`bg-white rounded-2xl border p-5 shadow-2xs transition-all cursor-pointer flex flex-col justify-between ${activeTab === 'categories' ? 'border-purple-500 ring-2 ring-purple-100 shadow-sm' : 'border-slate-200/80 hover:border-purple-200'
@@ -937,246 +848,7 @@ export function SettingsView() {
       )}
 
       {/* ============================================================== */}
-      {/* 2. COURSE TYPES MANAGEMENT (Editable & Deletable) */}
-      {/* ============================================================== */}
-      {activeTab === 'courses' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="font-bold text-base text-slate-900">Training Course Packages & Pricing Hub</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Edit package parameters, change durations or base fees, toggle RTO license status, or delete packages.</p>
-            </div>
-            <button
-              onClick={() => setIsAddCourseOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Course Package</span>
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[10px] uppercase font-bold tracking-wider">
-                <tr>
-                  <th className="py-2.5 px-3">Package Name</th>
-                  <th className="py-2.5 px-3">Training Duration</th>
-                  <th className="py-2.5 px-3">Base Fee (Locked)</th>
-                  <th className="py-2.5 px-3">RTO License Section</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {courseTypes.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{c.name}</div>
-                      <div className="text-[11px] text-slate-400">{c.description || 'No description added'}</div>
-                    </td>
-                    <td className="py-3 px-3 font-bold text-slate-800">{c.duration_days} Days</td>
-                    <td className="py-3 px-3 font-mono font-black text-blue-700 text-sm">₹{c.base_fee}</td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${c.is_license_course ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                        {c.is_license_course ? 'License Included' : 'Practice Only'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${c.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                        {c.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setEditingCourse({ ...c })}
-                          className="p-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
-                          title="Edit Course Package"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCourse(c)}
-                          className="p-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors"
-                          title="Delete Course Package"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Add Course Modal */}
-          {isAddCourseOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                  <h3 className="font-bold text-base text-slate-900">Add Course Package</h3>
-                  <button onClick={() => setIsAddCourseOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
-                </div>
-                <form onSubmit={handleCreateCourse} className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Course Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Heavy Vehicle Training"
-                      value={newCourse.name}
-                      onChange={e => setNewCourse({ ...newCourse, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Duration (Days) *</label>
-                      <input
-                        type="number"
-                        min="5"
-                        max="60"
-                        value={newCourse.duration_days}
-                        onChange={e => setNewCourse({ ...newCourse, duration_days: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Base Fee (₹) *</label>
-                      <input
-                        type="number"
-                        min="1000"
-                        value={newCourse.base_fee}
-                        onChange={e => setNewCourse({ ...newCourse, base_fee: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold font-mono"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Includes RTO License Processing?</label>
-                    <select
-                      value={newCourse.is_license_course}
-                      onChange={e => setNewCourse({ ...newCourse, is_license_course: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                    >
-                      <option value={1}>Yes - Expands LL & DL Fields (is_license_course = true)</option>
-                      <option value={0}>No - Practical Driving Only (is_license_course = false)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Course Description</label>
-                    <input
-                      type="text"
-                      placeholder="Optional details"
-                      value={newCourse.description}
-                      onChange={e => setNewCourse({ ...newCourse, description: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                    />
-                  </div>
-                  <div className="pt-3 flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAddCourseOpen(false)} className="px-3 py-2 rounded-xl text-slate-600">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl">Save Package</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Edit Course Modal */}
-          {editingCourse && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-              <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                  <h3 className="font-bold text-base text-slate-900">Edit Course Package</h3>
-                  <button onClick={() => setEditingCourse(null)}><X className="w-4 h-4 text-slate-400" /></button>
-                </div>
-                <form onSubmit={handleUpdateCourse} className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Course Name *</label>
-                    <input
-                      type="text"
-                      value={editingCourse.name}
-                      onChange={e => setEditingCourse({ ...editingCourse, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Duration (Days) *</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="90"
-                        value={editingCourse.duration_days}
-                        onChange={e => setEditingCourse({ ...editingCourse, duration_days: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold font-mono"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Base Fee (₹) *</label>
-                      <input
-                        type="number"
-                        min="100"
-                        value={editingCourse.base_fee}
-                        onChange={e => setEditingCourse({ ...editingCourse, base_fee: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold font-mono text-sm text-blue-700"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">License Course Flag</label>
-                      <select
-                        value={editingCourse.is_license_course ? 1 : 0}
-                        onChange={e => setEditingCourse({ ...editingCourse, is_license_course: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl"
-                      >
-                        <option value={1}>License Included</option>
-                        <option value={0}>Practice Only</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Package Status</label>
-                      <select
-                        value={editingCourse.is_active ? 1 : 0}
-                        onChange={e => setEditingCourse({ ...editingCourse, is_active: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-semibold"
-                      >
-                        <option value={1}>Active</option>
-                        <option value={0}>Inactive (Hidden)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Description</label>
-                    <textarea
-                      rows={2}
-                      value={editingCourse.description || ''}
-                      onChange={e => setEditingCourse({ ...editingCourse, description: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs"
-                    />
-                  </div>
-                  <div className="pt-3 flex justify-end gap-2">
-                    <button type="button" onClick={() => setEditingCourse(null)} className="px-3 py-2 rounded-xl text-slate-600">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-xs">Update Package</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ============================================================== */}
-      {/* 3. CATEGORIES & PAYMENT MODES (Editable & Deletable) */}
+      {/* 2. CATEGORIES & PAYMENT MODES (Editable & Deletable) */}
       {/* ============================================================== */}
       {activeTab === 'categories' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

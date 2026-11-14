@@ -94,40 +94,63 @@ async function deleteDocFromFirestore(tableName, docId) {
   }
 }
 
-// Upload all local SQLite tables to Firestore
+// Sync an individual table to Firestore (parallelized and pruned)
+async function syncTable(table, sqliteDb) {
+  if (!firestore || !sqliteDb) return 0;
+  try {
+    const rows = sqliteDb.prepare(`SELECT * FROM ${table}`).all();
+    const localDocIds = new Set(rows.map(r => getDocId(table, r)));
+
+    // 1. Batch upload/merge existing rows in chunks of 400
+    const chunkSize = 400;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+
+      for (const row of chunk) {
+        const docId = getDocId(table, row);
+        const cleanData = {};
+        for (const [k, v] of Object.entries(row)) {
+          cleanData[k] = v === undefined ? null : v;
+        }
+        cleanData._synced_at = new Date().toISOString();
+        const docRef = doc(firestore, table, docId);
+        batch.set(docRef, cleanData, { merge: true });
+      }
+      await batch.commit();
+    }
+
+    // 2. Prune documents in Firestore that were deleted in SQLite
+    const remoteSnap = await getDocs(collection(firestore, table));
+    const staleDocs = remoteSnap.docs.filter(d => !localDocIds.has(d.id));
+    if (staleDocs.length > 0) {
+      for (let i = 0; i < staleDocs.length; i += chunkSize) {
+        const chunk = staleDocs.slice(i, i + chunkSize);
+        const delBatch = writeBatch(firestore);
+        chunk.forEach(d => delBatch.delete(d.ref));
+        await delBatch.commit();
+      }
+    }
+    return rows.length;
+  } catch (err) {
+    console.warn(`Sync notice for table ${table}:`, err.message);
+    return 0;
+  }
+}
+
+// Upload all local SQLite tables to Firestore in parallel
 async function syncAllToFirestore(sqliteDb) {
   if (!firestore || !sqliteDb) return { success: false, error: 'Firestore or DB unavailable' };
 
-  console.log('🚀 Starting full sync from SQLite to Firebase Cloud Firestore...');
-  const stats = {};
-
-  for (const table of SYNC_TABLES) {
-    try {
-      const rows = sqliteDb.prepare(`SELECT * FROM ${table}`).all();
-      stats[table] = rows.length;
-
-      // Batch upload in chunks of 400
-      const chunkSize = 400;
-      for (let i = 0; i < rows.length; i += chunkSize) {
-        const chunk = rows.slice(i, i + chunkSize);
-        const batch = writeBatch(firestore);
-
-        for (const row of chunk) {
-          const docId = getDocId(table, row);
-          const cleanData = {};
-          for (const [k, v] of Object.entries(row)) {
-            cleanData[k] = v === undefined ? null : v;
-          }
-          cleanData._synced_at = new Date().toISOString();
-          const docRef = doc(firestore, table, docId);
-          batch.set(docRef, cleanData, { merge: true });
-        }
-        await batch.commit();
-      }
-    } catch (err) {
-      console.warn(`Sync notice for table ${table}:`, err.message);
-    }
-  }
+  console.log('🚀 Starting auto-sync from SQLite to Firebase Cloud Firestore...');
+  
+  const results = await Promise.all(
+    SYNC_TABLES.map(async (table) => {
+      const count = await syncTable(table, sqliteDb);
+      return [table, count];
+    })
+  );
+  const stats = Object.fromEntries(results);
 
   // Update sync metadata
   try {
@@ -138,7 +161,7 @@ async function syncAllToFirestore(sqliteDb) {
     }, { merge: true });
   } catch (e) {}
 
-  console.log('✅ Full sync to Firebase Cloud Firestore complete! Summary:', stats);
+  console.log('✅ Auto-sync to Firebase Cloud Firestore complete! Summary:', stats);
   return { success: true, stats };
 }
 
@@ -202,12 +225,37 @@ async function restoreAllFromFirestore(sqliteDb) {
   return { success: true, totalRestored };
 }
 
+let isSyncing = false;
+let syncRequested = false;
 let syncTimeout = null;
+
 function scheduleSync(sqliteDb) {
+  syncRequested = true;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
-    syncAllToFirestore(sqliteDb).catch(e => console.warn('Background sync error:', e.message));
-  }, 1000); // 1-second debounce
+    triggerSync(sqliteDb);
+  }, 300); // Fast 300ms debounce
+}
+
+async function triggerSync(sqliteDb) {
+  if (isSyncing) {
+    syncRequested = true;
+    return;
+  }
+  if (!syncRequested) return;
+
+  syncRequested = false;
+  isSyncing = true;
+  try {
+    await syncAllToFirestore(sqliteDb);
+  } catch (err) {
+    console.warn('⚠️ Auto-sync error:', err.message);
+  } finally {
+    isSyncing = false;
+    if (syncRequested) {
+      triggerSync(sqliteDb);
+    }
+  }
 }
 
 // Clear all transactional and non-admin collections from Firestore
@@ -264,6 +312,7 @@ module.exports = {
   isFirestoreReady: Boolean(firestore),
   syncRowToFirestore,
   deleteDocFromFirestore,
+  syncTable,
   syncAllToFirestore,
   restoreAllFromFirestore,
   scheduleSync,
