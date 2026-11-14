@@ -50,6 +50,17 @@ router.post('/', requireRole(['super_admin']), (req, res) => {
   }
 });
 
+// Manual trigger for Firebase Cloud Firestore synchronization
+router.post('/sync-firebase', requireRole(['super_admin']), async (req, res) => {
+  const { syncAllToFirestore } = require('../firebaseSync');
+  try {
+    const result = await syncAllToFirestore(db);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ==========================================
 // 1. COURSE TYPES CRUD
 // ==========================================

@@ -8,6 +8,7 @@ dotenv.config();
 
 const { db } = require('./db');
 const { authMiddleware } = require('./middleware/auth');
+const { restoreAllFromFirestore, syncAllToFirestore, scheduleSync } = require('./firebaseSync');
 const authRoutes = require('./routes/auth');
 const branchRoutes = require('./routes/branches');
 const settingRoutes = require('./routes/settings');
@@ -25,6 +26,35 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Automatic Firebase Cloud Firestore persistence middleware:
+// After any mutating request successfully completes, trigger a background sync to Firebase
+app.use((req, res, next) => {
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isMutation) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        scheduleSync(db);
+      }
+    });
+  }
+  next();
+});
+
+// Initial startup cloud restore:
+// Restores all branches, staff, students, courses, settings from Firebase Firestore
+(async () => {
+  try {
+    await restoreAllFromFirestore(db);
+  } catch (err) {
+    console.warn('Initial cloud restore notification:', err.message);
+  }
+})();
+
+// Periodic cloud synchronization every 5 minutes
+setInterval(() => {
+  syncAllToFirestore(db).catch(err => console.warn('Periodic sync notice:', err.message));
+}, 5 * 60 * 1000);
 
 // Public endpoints & Leads API
 app.use('/api/auth', authRoutes);

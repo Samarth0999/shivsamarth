@@ -237,7 +237,7 @@ router.post('/users', authMiddleware, (req, res) => {
 // Update user privileges and details (Super Admin)
 router.put('/users/:id', authMiddleware, (req, res) => {
   const targetId = parseInt(req.params.id, 10);
-  const { branch_id, name, email, phone, role, password, max_discount_limit, salary_type, base_salary, permissions, is_active } = req.body;
+  const { branch_id, name, phone, role, password, max_discount_limit, salary_type, base_salary, permissions, is_active } = req.body;
 
   const existing = getUserById(targetId);
   if (!existing) {
@@ -257,7 +257,6 @@ router.put('/users/:id', authMiddleware, (req, res) => {
     const updated = updateUser(targetId, {
       branch_id,
       name,
-      email,
       phone,
       password,
       role,

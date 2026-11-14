@@ -25,6 +25,23 @@ export function SettingsView() {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('branches'); // 'branches' | 'thresholds' | 'courses' | 'categories'
+  const [isSyncingFirebase, setIsSyncingFirebase] = useState(false);
+
+  const handleSyncFirebase = async () => {
+    setIsSyncingFirebase(true);
+    try {
+      const res = await apiFetch('/api/settings/sync-firebase', { method: 'POST' });
+      if (res.success) {
+        showToast('All tables and data successfully backed up to Firebase Cloud Firestore!');
+      } else {
+        throw new Error(res.error || 'Sync failed');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsSyncingFirebase(false);
+    }
+  };
 
   // Dynamic Settings form
   const [formSettings, setFormSettings] = useState({
@@ -410,6 +427,27 @@ export function SettingsView() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Storage: Ready
           </span>
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={handleSyncFirebase}
+              disabled={isSyncingFirebase}
+              className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold text-xs rounded-lg shadow-xs transition-all disabled:opacity-50 cursor-pointer shrink-0"
+              title="Manually trigger immediate full cloud backup of all tables to Firebase Firestore"
+            >
+              {isSyncingFirebase ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Flame className="w-3.5 h-3.5 fill-white" />
+                  <span>Sync All to Firebase</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 

@@ -641,7 +641,13 @@ function createUser(userData) {
   });
 
   const newId = tx();
-  return getUserById(newId);
+  const created = getUserById(newId);
+  try {
+    const { syncRowToFirestore } = require('./firebaseSync');
+    const rawUser = db.prepare('SELECT * FROM users WHERE id = ?').get(newId);
+    if (rawUser) syncRowToFirestore('users', rawUser);
+  } catch (e) {}
+  return created;
 }
 
 function updateUser(userId, userData) {
@@ -653,7 +659,6 @@ function updateUser(userId, userData) {
   const {
     branch_id,
     name,
-    email,
     phone,
     role,
     password,
@@ -664,19 +669,11 @@ function updateUser(userId, userData) {
     is_active
   } = userData;
 
-  if (email && email.trim().toLowerCase() !== existing.email.toLowerCase()) {
-    const conflict = db.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND id != ?').get(email.trim().toLowerCase(), userId);
-    if (conflict) {
-      throw new Error(`Email "${email}" is already registered to another staff member.`);
-    }
-  }
-
   const tx = db.transaction(() => {
     const update = db.prepare(`
       UPDATE users
       SET branch_id = COALESCE(?, branch_id),
           name = COALESCE(?, name),
-          email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           password_hash = COALESCE(?, password_hash),
           role = COALESCE(?, role),
@@ -690,7 +687,6 @@ function updateUser(userId, userData) {
     update.run(
       branch_id !== undefined ? (branch_id ? Number(branch_id) : null) : existing.branch_id,
       name ? name.trim() : existing.name,
-      email ? email.trim().toLowerCase() : existing.email,
       phone !== undefined ? phone : existing.phone,
       password || existing.password_hash,
       role || existing.role,
@@ -716,7 +712,13 @@ function updateUser(userId, userData) {
   });
 
   tx();
-  return getUserById(userId);
+  const updatedUser = getUserById(userId);
+  try {
+    const { syncRowToFirestore } = require('./firebaseSync');
+    const rawUser = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (rawUser) syncRowToFirestore('users', rawUser);
+  } catch (e) {}
+  return updatedUser;
 }
 
 function deleteUser(userId) {
@@ -734,6 +736,10 @@ function deleteUser(userId) {
   });
 
   tx();
+  try {
+    const { deleteDocFromFirestore } = require('./firebaseSync');
+    deleteDocFromFirestore('users', userId);
+  } catch (e) {}
   return { success: true, message: `Staff account "${existing.name}" deleted successfully.` };
 }
 
