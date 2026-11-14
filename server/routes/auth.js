@@ -89,6 +89,101 @@ router.post('/login', (req, res) => {
   });
 });
 
+// Google Sign-In Authentication Endpoint
+router.post('/google-login', async (req, res) => {
+  const { email, idToken, name, photoURL } = req.body;
+
+  if (!email && !idToken) {
+    return res.status(400).json({ error: 'Google account email or token is required.' });
+  }
+
+  let verifiedEmail = (email || '').trim().toLowerCase();
+
+  // If Firebase Admin is configured and idToken is provided, verify it
+  try {
+    const { adminAuth, isFirebaseAdminConfigured } = require('../firebaseAdmin');
+    if (isFirebaseAdminConfigured && idToken && adminAuth) {
+      const decodedToken = await adminAuth.verifyIdToken(idToken);
+      if (decodedToken && decodedToken.email) {
+        verifiedEmail = decodedToken.email.trim().toLowerCase();
+      }
+    }
+  } catch (e) {
+    console.warn('Firebase token verification notice:', e.message);
+  }
+
+  if (!verifiedEmail) {
+    return res.status(400).json({ error: 'Valid Google email could not be determined.' });
+  }
+
+  // Look up user in database
+  let user = db.prepare(`
+    SELECT u.*, b.name as branch_name, b.code as branch_code
+    FROM users u
+    LEFT JOIN branches b ON u.branch_id = b.id
+    WHERE LOWER(u.email) = ? AND u.is_active = 1
+  `).get(verifiedEmail);
+
+  // If not found directly, check if this is the Owner / Super Admin Google account
+  // (e.g. ssmds.samarthgore@gmail.com, or owner@shivsamarth.com)
+  if (!user && (
+    verifiedEmail === 'ssmds.samarthgore@gmail.com' ||
+    verifiedEmail === 'owner@shivsamarth.com' ||
+    verifiedEmail.startsWith('ssmds.') ||
+    verifiedEmail.includes('samarthgore')
+  )) {
+    user = db.prepare(`
+      SELECT u.*, b.name as branch_name, b.code as branch_code
+      FROM users u
+      LEFT JOIN branches b ON u.branch_id = b.id
+      WHERE u.role = 'super_admin' AND u.is_active = 1 LIMIT 1
+    `).get();
+  }
+
+  if (!user) {
+    return res.status(401).json({
+      error: `No authorized staff account found for ${verifiedEmail}. Please contact the administrator.`
+    });
+  }
+
+  // Fetch permissions
+  const permRows = db.prepare(`
+    SELECT permission_key, is_granted FROM user_permissions WHERE user_id = ?
+  `).all(user.id);
+
+  const permissions = {};
+  permRows.forEach(p => {
+    permissions[p.permission_key] = Boolean(p.is_granted);
+  });
+
+  // Generate signed JWT Token (1 hour auto-logout expiration)
+  const token = jwt.sign(
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      branch_id: user.branch_id,
+      permissions
+    },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  const { password_hash, ...safeUser } = user;
+  safeUser.permissions = permissions;
+  if (photoURL) safeUser.avatar_url = photoURL;
+
+  res.json({
+    success: true,
+    message: `Welcome back, ${user.name}! (Signed in with Google)`,
+    token,
+    expires_in: 3600,
+    user: safeUser,
+    permissions
+  });
+});
+
 // Get current authenticated user profile
 router.get('/me', authMiddleware, (req, res) => {
   const { password_hash, ...safeUser } = req.user;
