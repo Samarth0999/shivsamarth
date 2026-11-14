@@ -210,6 +210,55 @@ function scheduleSync(sqliteDb) {
   }, 1000); // 1-second debounce
 }
 
+// Clear all transactional and non-admin collections from Firestore
+async function clearAllFirestoreCollections() {
+  if (!firestore) return;
+  const wipeCollections = [
+    'students',
+    'student_payments',
+    'student_attendance',
+    'staff_attendance',
+    'staff_advances',
+    'payroll_records',
+    'expenses',
+    'leads',
+    'vehicle_rotations',
+    'enroll_sequences'
+  ];
+
+  for (const colName of wipeCollections) {
+    try {
+      const snap = await getDocs(collection(firestore, colName));
+      if (!snap.empty) {
+        const batch = writeBatch(firestore);
+        snap.docs.forEach(docSnap => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn(`Error clearing Firestore collection ${colName}:`, e.message);
+    }
+  }
+
+  // Also remove non-super-admin users from Firestore
+  try {
+    const userSnap = await getDocs(collection(firestore, 'users'));
+    if (!userSnap.empty) {
+      const batch = writeBatch(firestore);
+      userSnap.docs.forEach(d => {
+        const u = d.data();
+        if (u.role !== 'super_admin') {
+          batch.delete(d.ref);
+        }
+      });
+      await batch.commit();
+    }
+  } catch (e) {
+    console.warn('Error clearing non-admin users in Firestore:', e.message);
+  }
+}
+
 module.exports = {
   firestore,
   isFirestoreReady: Boolean(firestore),
@@ -217,6 +266,7 @@ module.exports = {
   deleteDocFromFirestore,
   syncAllToFirestore,
   restoreAllFromFirestore,
-  scheduleSync
+  scheduleSync,
+  clearAllFirestoreCollections
 };
 

@@ -61,6 +61,38 @@ router.post('/sync-firebase', requireRole(['super_admin']), async (req, res) => 
   }
 });
 
+// Clear all application data (Super Admin only, requires typing CONFIRM)
+router.post('/clear-all-data', requireRole(['super_admin']), async (req, res) => {
+  const { confirmation } = req.body;
+  const normalized = (confirmation || '').trim().toUpperCase();
+
+  if (normalized !== 'CONFIRM' && normalized !== 'CLEAR') {
+    return res.status(400).json({ error: 'Please type "CONFIRM" in the confirmation box to authorize this action.' });
+  }
+
+  try {
+    const { clearAllApplicationData } = require('../db');
+    const { clearAllFirestoreCollections, syncAllToFirestore } = require('../firebaseSync');
+
+    // 1. Clear SQLite local tables
+    clearAllApplicationData();
+
+    // 2. Clear Firebase Firestore collections
+    await clearAllFirestoreCollections();
+
+    // 3. Re-sync clean state (super admin + branches + default settings) to Firestore
+    await syncAllToFirestore(db);
+
+    res.json({
+      success: true,
+      message: 'All application data (students, payments, attendance, expenses, leads, and staff) has been cleared successfully from both local database and Firebase.'
+    });
+  } catch (err) {
+    console.error('Error in clear-all-data:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 1. COURSE TYPES CRUD
 // ==========================================

@@ -743,9 +743,54 @@ function deleteUser(userId) {
   return { success: true, message: `Staff account "${existing.name}" deleted successfully.` };
 }
 
+function clearAllApplicationData() {
+  const tx = db.transaction(() => {
+    // 1. Wipe all operational and financial records
+    db.prepare('DELETE FROM student_payments').run();
+    db.prepare('DELETE FROM student_attendance').run();
+    db.prepare('DELETE FROM staff_attendance').run();
+    db.prepare('DELETE FROM staff_advances').run();
+    db.prepare('DELETE FROM payroll_records').run();
+    db.prepare('DELETE FROM expenses').run();
+    db.prepare('DELETE FROM vehicle_rotations').run();
+    db.prepare('DELETE FROM leads').run();
+    db.prepare('DELETE FROM enroll_sequences').run();
+    db.prepare('DELETE FROM students').run();
+
+    // 2. Unassign instructors from batches
+    db.prepare('UPDATE batches SET instructor_id = NULL').run();
+
+    // 3. Remove all non-super-admin staff accounts
+    const nonAdmins = db.prepare("SELECT id FROM users WHERE role != 'super_admin'").all();
+    for (const u of nonAdmins) {
+      db.prepare('DELETE FROM user_permissions WHERE user_id = ?').run(u.id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+    }
+
+    // 4. Ensure Super Admin account exists and is pristine
+    const owner = db.prepare("SELECT * FROM users WHERE role = 'super_admin' LIMIT 1").get();
+    if (!owner) {
+      db.prepare(`
+        INSERT INTO users (branch_id, name, email, phone, password_hash, role, max_discount_limit, salary_type, base_salary, is_active)
+        VALUES (NULL, 'Samarth Gore (Owner)', 'owner@shivsamarth.com', '9370107031', 'sam@2007', 'super_admin', 100000, 'monthly', 50000, 1)
+      `).run();
+    } else {
+      db.prepare(`
+        UPDATE users
+        SET password_hash = 'sam@2007', is_active = 1, phone = '9370107031'
+        WHERE id = ?
+      `).run(owner.id);
+    }
+  });
+
+  tx();
+  return { success: true, message: 'All application data has been cleared.' };
+}
+
 module.exports = {
   db,
   getNextEnrollId,
+  clearAllApplicationData,
   // User Management Methods
   getAllUsers,
   getUserById,
