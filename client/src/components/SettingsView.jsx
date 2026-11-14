@@ -4,7 +4,7 @@ import {
   Settings, Sliders, Shield, Award, DollarSign,
   Receipt, Save, Plus, CheckCircle, AlertTriangle, Users,
   ToggleLeft, ToggleRight, Edit, Trash2, X, Check, MapPin, Navigation,
-  Building2, ArrowRight, ExternalLink, Star
+  Building2, ArrowRight, ExternalLink, Star, Flame, Cloud
 } from 'lucide-react';
 
 export function SettingsView() {
@@ -20,7 +20,8 @@ export function SettingsView() {
     apiFetch,
     showToast,
     loadInitialData,
-    setActiveTab: setPortalTab
+    setActiveTab: setPortalTab,
+    isFirebaseConfigured
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('branches'); // 'branches' | 'thresholds' | 'courses' | 'categories'
@@ -367,6 +368,49 @@ export function SettingsView() {
         <p className="text-sm text-slate-500 mt-1">
           Configure multi-branch infrastructure, role-based access control, and user directory.
         </p>
+      </div>
+
+      {/* Firebase Cloud Infrastructure Banner */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-blue-500/10 border border-amber-300/70 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Flame className="w-5 h-5 fill-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                <span>Firebase Cloud Infrastructure</span>
+              </h4>
+              {isFirebaseConfigured ? (
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Connected &amp; Active
+                </span>
+              ) : (
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                  Ready for Credentials
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Project ID: <span className="font-mono font-semibold text-slate-800">shivsamarth-51326</span> • Cloud Firestore (Database) • Firebase Authentication • Cloud Storage
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs flex-wrap">
+          <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Firestore DB: Ready
+          </span>
+          <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Auth: Ready
+          </span>
+          <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Storage: Ready
+          </span>
+        </div>
       </div>
 
       {/* Top 4 Administration Cards */}

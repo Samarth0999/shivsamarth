@@ -1,4 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { 
+  isFirebaseConfigured, 
+  auth as firebaseAuth, 
+  db as firestoreDb, 
+  storage as firebaseStorage,
+  signInWithGoogle,
+  logOutFirebase
+} from '../firebase';
 
 const AppContext = createContext(null);
 
@@ -457,7 +465,13 @@ export function AppProvider({ children }) {
         triggerWhatsAppReminder,
         triggerGoogleReviewRequest,
         loadInitialData,
-        sessionExpiresAt
+        sessionExpiresAt,
+        isFirebaseConfigured,
+        firebaseAuth,
+        firestoreDb,
+        firebaseStorage,
+        signInWithGoogle,
+        logOutFirebase
       }}
     >
       {children}
