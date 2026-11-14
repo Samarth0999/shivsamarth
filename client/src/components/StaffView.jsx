@@ -286,7 +286,7 @@ export function StaffView() {
 
   const handleSaveStaff = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || (!editingStaff && !form.email.trim())) {
+    if (!form.name.trim() || !form.email.trim()) {
       showToast('Name and Email are required.', 'error');
       return;
     }
@@ -756,11 +756,11 @@ export function StaffView() {
                   <input
                     type="email"
                     required
-                    disabled={Boolean(editingStaff)}
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 outline-none focus:border-purple-500 disabled:bg-slate-50"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 outline-none focus:border-purple-500"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">Staff can use this email for portal login and Google Sign-In.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">Phone Number</label>

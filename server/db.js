@@ -653,6 +653,7 @@ function updateUser(userId, userData) {
   const {
     branch_id,
     name,
+    email,
     phone,
     role,
     password,
@@ -663,11 +664,19 @@ function updateUser(userId, userData) {
     is_active
   } = userData;
 
+  if (email && email.trim().toLowerCase() !== existing.email.toLowerCase()) {
+    const conflict = db.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND id != ?').get(email.trim().toLowerCase(), userId);
+    if (conflict) {
+      throw new Error(`Email "${email}" is already registered to another staff member.`);
+    }
+  }
+
   const tx = db.transaction(() => {
     const update = db.prepare(`
       UPDATE users
       SET branch_id = COALESCE(?, branch_id),
           name = COALESCE(?, name),
+          email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           password_hash = COALESCE(?, password_hash),
           role = COALESCE(?, role),
@@ -681,6 +690,7 @@ function updateUser(userId, userData) {
     update.run(
       branch_id !== undefined ? (branch_id ? Number(branch_id) : null) : existing.branch_id,
       name ? name.trim() : existing.name,
+      email ? email.trim().toLowerCase() : existing.email,
       phone !== undefined ? phone : existing.phone,
       password || existing.password_hash,
       role || existing.role,
